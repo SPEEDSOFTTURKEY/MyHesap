@@ -1,0 +1,112 @@
+.c-sidebar {
+  transition: background-color 0.15s ease !important; /* Only transition background */
+  z-index: 1000; /* Ensure sidebar is above content */
+  width: 250px; /* Default width when not unfoldable */
+}
+
+/* Lock width when minimized */
+.c-sidebar.c-sidebar-unfoldable {
+  width: 60px !important;
+  min-width: 60px !important;
+  max-width: 60px !important;
+  transition: none !important; /* Prevent width transition */
+}
+
+/* Explicitly prevent expansion on sidebar or its children during hover */
+.c-sidebar.c-sidebar-unfoldable,
+.c-sidebar.c-sidebar-unfoldable:hover,
+.c-sidebar.c-sidebar-unfoldable *:hover {
+  width: 60px !important;
+  min-width: 60px !important;
+  max-width: 60px !important;
+}
+
+/* Center navigation links */
+.c-sidebar.c-sidebar-unfoldable .c-sidebar-nav .nav-link,
+.c-sidebar.c-sidebar-unfoldable .c-sidebar-nav .dropdown-toggle {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 0.5rem;
+  width: 100%;
+}
+
+/* Remove icon margin */
+.c-sidebar.c-sidebar-unfoldable .c-sidebar-nav .nav-icon {
+  margin-right: 0 !important;
+}
+
+/* Logo size and prevent shifting on hover */
+.c-sidebar.c-sidebar-unfoldable .c-sidebar-brand {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  margin: 0 !important;
+  transition: none !important; /* Prevent any animation */
+}
+
+.c-sidebar.c-sidebar-unfoldable .c-sidebar-brand img {
+  width: 40px;
+  margin: 0 !important;
+}
+
+/* Center footer toggler */
+.c-sidebar.c-sidebar-unfoldable .c-sidebar-footer {
+  justify-content: center !important;
+}
+
+/* Active and hover states */
+.c-sidebar-nav .nav-link.active,
+.c-sidebar-nav .dropdown-item.active-sub-item {
+  background-color: #3c4b64 !important;
+  color: #fff !important;
+}
+
+.c-sidebar-nav .nav-link:hover,
+.c-sidebar-nav .dropdown-toggle:hover {
+  background-color: #2f3a4e !important;
+  color: #fff !important;
+}
+
+/* Dropdown styling */
+.c-sidebar.c-sidebar-unfoldable .c-dropdown-menu {
+  background-color: #1f3a4e; /* Darker shade for dropdown */
+  border: none; /* Remove border for cleaner look */
+  min-width: 220px; /* Slightly wider dropdown for better readability */
+  margin-left: 60px !important; /* Position right of sidebar */
+  z-index: 1050 !important; /* Increased to ensure dropdown is above content */
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+  opacity: 0;
+  transform: translateX(-10px);
+}
+
+.c-sidebar.c-sidebar-unfoldable .c-dropdown-menu.show {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.c-sidebar.c-sidebar-unfoldable .c-dropdown-item {
+  color: #fff !important;
+  padding: 0.75rem 1rem !important; /* Increased padding for better touch area */
+  transition: background-color 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem; /* Space between icon and text */
+}
+
+.c-sidebar.c-sidebar-unfoldable .c-dropdown-item:hover {
+  background-color: #3c4b64 !important;
+  color: #fff !important;
+}
+
+/* Ensure dropdown toggle is styled like nav link */
+.c-sidebar.c-sidebar-unfoldable .c-dropdown-toggle.nav-link {
+  padding: 0.5rem !important;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}

@@ -1,0 +1,262 @@
+@use "@coreui/coreui/scss/coreui" as * with ($enable-deprecation-messages: false,
+);
+@use "@coreui/chartjs/scss/coreui-chartjs";
+@use "vendors/simplebar";
+
+:root {
+  --primary-color: #2965A8;
+  --danger-color: #dc3545;
+  --success-color: #28a745;
+  --info-color: #17a2b8;
+  --warning-color: #ffc107;
+  --secondary-color: #6c757d;
+  --income-color: #34A149;
+  --outcome-color: #E1555A;
+  --cancel-color: #F6A213;
+  --jetBlack-color: #343434;
+  --white-color: #fff;
+  --black-color: #000;
+}
+
+body {
+  background-color: var(--cui-tertiary-bg);
+}
+
+.react-datepicker {
+  font-size: 2rem;
+}
+
+.react-datepicker__month-container {
+  width: 400px;
+}
+
+.react-datepicker__day--selected {
+  background-color: #339af0;
+  color: white;
+}
+
+.react-datepicker__portal,
+.react-datepicker {
+  z-index: 9999 !important;
+}
+
+.custom-calendar {
+  font-size: 1.2rem;
+}
+
+/* DatePicker takvim ikon rengi - tema ile uyumlu */
+.MuiInputAdornment-root .MuiSvgIcon-root {
+  color: var(--cui-modal-color) !important;
+}
+
+.wrapper {
+  width: 100%;
+  padding-inline: var(--cui-sidebar-occupy-start, 0) var(--cui-sidebar-occupy-end, 0);
+  will-change: auto;
+  @include transition(padding .15s);
+}
+
+.header>.container-fluid,
+.sidebar-header {
+  min-height: calc(4rem + 1px); // stylelint-disable-line function-disallowed-list
+}
+
+.sidebar-brand-full {
+  margin-left: 3px;
+  transition: none !important;
+  /* Prevent animation */
+}
+
+.sidebar-header {
+  .nav-underline-border {
+    --cui-nav-underline-border-link-padding-x: 1rem;
+    --cui-nav-underline-border-gap: 0;
+  }
+
+  .nav-link {
+    display: flex;
+    align-items: center;
+    min-height: calc(4rem + 1px); // stylelint-disable-line function-disallowed-list
+  }
+}
+
+.sidebar-toggler {
+  margin-inline-start: auto;
+}
+
+/* Ensure sidebar-narrow-unfoldable does not expand on hover */
+.sidebar-narrow,
+.sidebar-narrow-unfoldable,
+.sidebar-narrow-unfoldable:hover {
+  width: 60px !important;
+  min-width: 60px !important;
+  max-width: 60px !important;
+  transition: none !important;
+  /* Prevent width transition */
+}
+
+/* Prevent logo shifting in unfoldable state */
+.sidebar-narrow-unfoldable .sidebar-brand-full,
+.sidebar-narrow-unfoldable:hover .sidebar-brand-full {
+  margin-left: 0 !important;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transition: none !important;
+}
+
+.sidebar-narrow-unfoldable .sidebar-toggler,
+.sidebar-narrow-unfoldable:hover .sidebar-toggler {
+  margin-inline-end: auto;
+}
+
+.header>.container-fluid+.container-fluid {
+  min-height: 3rem;
+}
+
+.footer {
+  min-height: calc(3rem + 1px); // stylelint-disable-line function-disallowed-list
+}
+
+@include color-mode(dark) {
+  body {
+    background-color: var(--cui-dark-bg-subtle);
+  }
+
+  .footer {
+    --cui-footer-bg: var(--cui-body-bg);
+  }
+}
+
+/*
+@use "@coreui/coreui/scss/coreui" as * with ($enable-deprecation-messages: false,
+);
+@use "@coreui/chartjs/scss/coreui-chartjs";
+@use "vendors/simplebar";
+*/
+
+
+:root {
+  --primary-color: #2965A8;
+  --danger-color: #dc3545;
+  --success-color: #28a745;
+  --info-color: #17a2b8;
+  --warning-color: #ffc107;
+  --secondary-color: #6c757d;
+  --income-color: #34A149;
+  --outcome-color: #E1555A;
+  --cancel-color: #F6A213;
+  --jetBlack-color: #343434;
+  --white-color: #fff;
+  --black-color: #000;
+}
+
+body {
+  background-color: var(--cui-tertiary-bg);
+}
+
+.react-datepicker {
+  font-size: 2rem;
+}
+
+.react-datepicker__month-container {
+  width: 400px;
+}
+
+.react-datepicker__day--selected {
+  background-color: #339af0;
+  color: white;
+}
+
+.react-datepicker__portal,
+.react-datepicker {
+  z-index: 9999 !important;
+}
+
+.custom-calendar {
+  font-size: 1.2rem;
+}
+
+/* DatePicker takvim ikon rengi - tema ile uyumlu */
+.MuiInputAdornment-root .MuiSvgIcon-root {
+  color: var(--cui-modal-color) !important;
+}
+
+.wrapper {
+  width: 100%;
+  padding-inline: var(--cui-sidebar-occupy-start, 0) var(--cui-sidebar-occupy-end, 0);
+  will-change: auto;
+  @include transition(padding .15s);
+}
+
+.header>.container-fluid,
+.sidebar-header {
+  min-height: calc(4rem + 1px); // stylelint-disable-line function-disallowed-list
+}
+
+.sidebar-brand-full {
+  margin-left: 3px;
+  transition: none !important;
+  /* Prevent animation */
+}
+
+.sidebar-header {
+  .nav-underline-border {
+    --cui-nav-underline-border-link-padding-x: 1rem;
+    --cui-nav-underline-border-gap: 0;
+  }
+
+  .nav-link {
+    display: flex;
+    align-items: center;
+    min-height: calc(4rem + 1px); // stylelint-disable-line function-disallowed-list
+  }
+}
+
+.sidebar-toggler {
+  margin-inline-start: auto;
+}
+
+/* Ensure sidebar-narrow-unfoldable does not expand on hover */
+.sidebar-narrow,
+.sidebar-narrow-unfoldable,
+.sidebar-narrow-unfoldable:hover {
+  width: 60px !important;
+  min-width: 60px !important;
+  max-width: 60px !important;
+  transition: none !important;
+  /* Prevent width transition */
+}
+
+/* Prevent logo shifting in unfoldable state */
+.sidebar-narrow-unfoldable .sidebar-brand-full,
+.sidebar-narrow-unfoldable:hover .sidebar-brand-full {
+  margin-left: 0 !important;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  transition: none !important;
+}
+
+.sidebar-narrow-unfoldable .sidebar-toggler,
+.sidebar-narrow-unfoldable:hover .sidebar-toggler {
+  margin-inline-end: auto;
+}
+
+.header>.container-fluid+.container-fluid {
+  min-height: 3rem;
+}
+
+.footer {
+  min-height: calc(3rem + 1px); // stylelint-disable-line function-disallowed-list
+}
+
+@include color-mode(dark) {
+  body {
+    background-color: var(--cui-dark-bg-subtle);
+  }
+
+  .footer {
+    --cui-footer-bg: var(--cui-body-bg);
+  }
+}

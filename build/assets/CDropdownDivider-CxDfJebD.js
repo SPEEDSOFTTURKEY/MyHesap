@@ -1,0 +1,1 @@
+import{r as p,_ as t,R as i,w as c,v as d,P as m}from"./index-DAwD_DDx.js";var a=p.forwardRef(function(s,r){var e=s.className,o=t(s,["className"]);return i.createElement("hr",c({className:d("dropdown-divider",e)},o,{ref:r}))});a.propTypes={className:m.string};a.displayName="CDropdownDivider";export{a as C};
