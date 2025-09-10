@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   CButton,
@@ -52,6 +52,22 @@ const CustomerNew = () => {
   const [toasts, setToasts] = useState([]);
   const [activeTab, setActiveTab] = useState("identity");
   const [loading, setLoading] = useState(false);
+  // Kullanıcı bilgileri, sağlanan veri kullanıldı
+  const [user] = useState({
+    id: 1002,
+    aktiflikDurumu: 1,
+    durumu: 1,
+    yetkiId: 1,
+    kullaniciAdi: "gizem",
+  });
+
+  // Kullanıcı bilgilerini console'a yazdır
+  useEffect(() => {
+    console.log("Giriş yapan kullanıcı bilgileri:", user);
+    // Gerçek uygulamada, kullanıcı bilgileri oturumdan alınmalı, örn:
+    // const user = getUserFromSession(); // Oturum yönetim fonksiyonu
+    // console.log("Giriş yapan kullanıcı bilgileri:", user);
+  }, [user]);
 
   // Bildirim (toast) ekleme fonksiyonu
   const addToast = (message, type = "success") => {
@@ -88,8 +104,7 @@ const CustomerNew = () => {
   // Form gönderimini yönet
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log("Form gönderiliyor...", formData); // <-- teşhis
-    console.log("Submit öncesi formData:", JSON.stringify(formData, null, 2));
+    console.log("Form gönderiliyor...", formData);
 
     try {
       setLoading(true);
@@ -99,6 +114,7 @@ const CustomerNew = () => {
 
       if (!formData.unvani?.trim()) throw new Error("Müşteri unvanı zorunlu.");
       if (!formData.email?.trim()) throw new Error("E-posta zorunlu.");
+      if (!user.id) throw new Error("Kullanıcı ID'si eksik.");
 
       const customerData = {
         unvani,
@@ -130,6 +146,13 @@ const CustomerNew = () => {
         if (k === "fotograf" && v) formDataToSend.append(k, v);
         else formDataToSend.append(k, v == null ? "" : v);
       });
+      formDataToSend.append("kullaniciId", user.id); // Kullanıcı ID'si (1002) ekleniyor
+
+      // FormData içeriğini console'a yazdır
+      console.log("Gönderilen FormData içeriği:");
+      for (let [key, value] of formDataToSend.entries()) {
+        console.log(`${key}: ${value}`);
+      }
 
       const res = await api.post(
         `${API_BASE_URL}/musteri/musteri-create`,

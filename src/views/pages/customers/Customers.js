@@ -39,12 +39,20 @@ const Customers = () => {
   const [showBalanceFilter, setShowBalanceFilter] = useState("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [showExcelModal, setShowExcelModal] = useState(false);
-  const [seciliDosya, setseciliDosya] = useState(null);
+  const [seciliDosya, setSeciliDosya] = useState(null);
   const [uploadLoading, setUploadLoading] = useState(false);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const toaster = useRef();
   const navigate = useNavigate();
+  // Kullanıcı bilgileri
+  const [user] = useState({
+    id: 1002,
+    aktiflikDurumu: 1,
+    durumu: 1,
+    yetkiId: 1,
+    kullaniciAdi: "gizem",
+  });
 
   const addToast = (message, type = "success") => {
     const toast = (
@@ -114,11 +122,12 @@ const Customers = () => {
       riskLimit: apiCustomer.riskLimiti || 0,
       dueDate: apiCustomer.vade || "",
       isTaxExempt: apiCustomer.vergiMuaf || false,
-      bankInfo: apiCustomer.bankaBilgileri || "",
+      bankInfo: apiCustomer.iban || apiCustomer.bankaBilgileri || "",
       contactPerson: apiCustomer.yetkiliKisi || "",
       otherContact: apiCustomer.diger || "",
       image: apiCustomer.fotograf || "",
       branches: apiCustomer.subeler || [],
+      musteriSiniflandirmaId: apiCustomer.musteriSiniflandirmaId || 0,
     };
   };
 
@@ -142,6 +151,7 @@ const Customers = () => {
           (customer) => customer.id === updatedCustomerId,
         );
         if (updatedCustomer) {
+          console.log("Seçilen müşteri:", updatedCustomer); // Seçilen müşteri verisini kontrol et
           setSelectedCustomer(updatedCustomer);
           setShowUpdateModal(true);
         }
@@ -189,7 +199,7 @@ const Customers = () => {
   };
 
   const handleFileChange = (e) => {
-    setseciliDosya(e.target.files[0]);
+    setSeciliDosya(e.target.files[0]);
   };
 
   const handleUploadExcel = async () => {
@@ -201,13 +211,21 @@ const Customers = () => {
     try {
       const formData = new FormData();
       formData.append("file", seciliDosya);
+      formData.append("kullaniciId", user.id); // Kullanıcı ID'si (1002) ekleniyor
+
+      // FormData içeriğini console'a yazdır
+      console.log("Gönderilen FormData içeriği:");
+      for (let [key, value] of formData.entries()) {
+        console.log(`${key}: ${value}`);
+      }
+
       const response = await api.post(`${API_BASE_URL}/musteri/upload-excel`, formData, {
         headers: { "Content-Type": "multipart/form-data", accept: "*/*" },
       });
-      await fetchCustomers(response.data.id); // Excel yükleme sonrası güncellenen müşterinin ID'sini kullan
+      await fetchCustomers(); // Müşterileri yeniden yükle
       addToast("Excel dosyası başarıyla yüklendi.", "success");
       setShowExcelModal(false);
-      setseciliDosya(null);
+      setSeciliDosya(null);
     } catch (err) {
       addToast(
         err.response?.data?.message || "Excel dosyası yüklenemedi.",

@@ -8,7 +8,7 @@ import {
   CButtonGroup,
   CForm,
 } from "@coreui/react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import CustomerIdentity from "./CustomerIdentity";
 import CustomerFinancial from "./CustomerFinancial";
 import CustomerContact from "./CustomerContact";
@@ -20,31 +20,74 @@ const API_BASE_URL = "https://localhost:44375/api";
 const CustomerModal = ({ visible, onClose, onSubmit, customer, addToast }) => {
   // Form verilerini başlangıçta müşteri verileriyle veya boş değerlerle doldur
   const [formData, setFormData] = useState({
-    id: customer?.id || 0,
-    unvani: customer?.name || "",
-    fotograf: customer?.fotograf || null,
-    vergiDairesi: customer?.taxOffice || "",
-    vergiNumarasi: customer?.taxOrIdNumber || "",
-    vergiMuaf: customer?.isTaxExempt || false,
-    iban: customer?.bankInfo || "",
-    paraBirimi: customer?.currency || "TRY",
-    riskLimiti: customer?.riskLimit || 0,
-    vade: customer?.dueDate || 0,
-    iskonto: customer?.iskonto || 0,
-    acilisBakiye: customer?.openBalance || 0,
-    yetkiliKisi: customer?.contactPerson || "",
-    email: customer?.email || "",
-    adres: customer?.address || "",
-    telefon: customer?.phone || "",
-    telefon2: customer?.phone2 || "",
-    diger: customer?.otherContact || "",
-    musteriSiniflandirmaId: customer?.musteriSiniflandirmaId || 0,
-    kodu: customer?.accountingCode || "",
-    aciklama: customer?.note || "",
+    id: 0,
+    unvani: "",
+    fotograf: null,
+    vergiDairesi: "",
+    vergiNumarasi: "",
+    vergiMuaf: false,
+    iban: "",
+    paraBirimi: "TRY",
+    riskLimiti: 0,
+    vade: 0,
+    iskonto: 0,
+    acilisBakiye: 0,
+    yetkiliKisi: "",
+    email: "",
+    adres: "",
+    telefon: "",
+    telefon2: "",
+    diger: "",
+    musteriSiniflandirmaId: 0,
+    kodu: "",
+    aciklama: "",
   });
   const [activeTab, setActiveTab] = useState("identity");
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  // Kullanıcı bilgileri
+  const [user] = useState({
+    id: 1002,
+    aktiflikDurumu: 1,
+    durumu: 1,
+    yetkiId: 1,
+    kullaniciAdi: "gizem",
+  });
+
+  // customer prop'u değiştiğinde formData'yı güncelle
+  useEffect(() => {
+    console.log("Gelen customer prop'u:", customer); // customer prop'unu kontrol et
+    if (customer) {
+      setFormData({
+        id: customer.id || 0,
+        unvani: customer.name || customer.unvani || "",
+        fotograf: customer.fotograf || null,
+        vergiDairesi: customer.taxOffice || customer.vergiDairesi || "",
+        vergiNumarasi: customer.taxOrIdNumber || customer.vergiNumarasi || "",
+        vergiMuaf: customer.isTaxExempt || customer.vergiMuaf || false,
+        iban: customer.bankInfo || customer.iban || "",
+        paraBirimi: customer.currency || customer.paraBirimi || "TRY",
+        riskLimiti: customer.riskLimit || customer.riskLimiti || 0,
+        vade: customer.dueDate || customer.vade || 0,
+        iskonto: customer.iskonto || 0,
+        acilisBakiye: customer.openBalance || customer.acilisBakiye || 0,
+        yetkiliKisi: customer.contactPerson || customer.yetkiliKisi || "",
+        email: customer.email || "",
+        adres: customer.address || customer.adres || "",
+        telefon: customer.phone || customer.telefon || "",
+        telefon2: customer.phone2 || customer.telefon2 || "",
+        diger: customer.otherContact || customer.diger || "",
+        musteriSiniflandirmaId: customer.musteriSiniflandirmaId || 0,
+        kodu: customer.accountingCode || customer.kodu || "",
+        aciklama: customer.note || customer.aciklama || "",
+      });
+    }
+  }, [customer]);
+
+  // Kullanıcı bilgilerini console'a yazdır
+  useEffect(() => {
+    console.log("Giriş yapan kullanıcı bilgileri:", user);
+  }, [user]);
 
   // Form değişikliklerini yönet
   const handleChange = (e) => {
@@ -88,42 +131,52 @@ const CustomerModal = ({ visible, onClose, onSubmit, customer, addToast }) => {
       setLoading(true);
       // API için müşteri verisi hazırla
       const customerData = {
-        id: customer?.id || 0,
+        id: formData.id,
         unvani: formData.unvani,
         fotograf: formData.fotograf,
-        vergiDairesi: formData.vergiDairesi || "",
-        vergiNumarasi: formData.vergiNumarasi || "",
+        vergiDairesi: formData.vergiDairesi,
+        vergiNumarasi: formData.vergiNumarasi,
         vergiMuaf: formData.vergiMuaf ? 1 : 0,
-        iban: formData.iban || "",
-        paraBirimi: formData.paraBirimi || "TRY",
+        iban: formData.iban,
+        paraBirimi: formData.paraBirimi,
         riskLimiti: parseFloat(formData.riskLimiti) || 0,
         vade: parseInt(formData.vade) || 0,
         iskonto: parseFloat(formData.iskonto) || 0,
         acilisBakiye: parseFloat(formData.acilisBakiye) || 0,
-        yetkiliKisi: formData.yetkiliKisi || "",
-        email: formData.email || "",
-        adres: formData.adres || "",
-        telefon: formData.telefon || "",
-        telefon2: formData.telefon2 || "",
-        diger: formData.diger || "",
+        yetkiliKisi: formData.yetkiliKisi,
+        email: formData.email,
+        adres: formData.adres,
+        telefon: formData.telefon,
+        telefon2: formData.telefon2,
+        diger: formData.diger,
         musteriSiniflandirmaId: parseInt(formData.musteriSiniflandirmaId) || 0,
-        kodu: formData.kodu || "",
-        aciklama: formData.aciklama || "",
+        kodu: formData.kodu,
+        aciklama: formData.aciklama,
         durumu: 1,
         aktif: 1,
       };
 
       // Çok parçalı veri ile API'ye gönder
       const formDataToSend = new FormData();
-      for (const key in customerData) {
-        if (key === "fotograf" && customerData[key]) {
-          formDataToSend.append(key, customerData[key]);
-        } else {
-          formDataToSend.append(
-            key,
-            customerData[key] === null ? "" : customerData[key]
-          );
-        }
+if (customerData) {
+  for (const key in customerData) {
+    if (key === "fotograf" && customerData[key]) {
+      formDataToSend.append(key, customerData[key]);
+    } else {
+      formDataToSend.append(
+        key,
+        customerData[key] === null ? "" : customerData[key]
+      );
+    }
+  }
+}
+
+      formDataToSend.append("kullaniciId", user.id); // Kullanıcı ID'si (1002) ekleniyor
+
+      // FormData içeriğini console'a yazdır
+      console.log("Gönderilen FormData içeriği:");
+      for (let [key, value] of formDataToSend.entries()) {
+        console.log(`${key}: ${value}`);
       }
 
       // API çağrısı ile müşteri güncelleme
@@ -132,7 +185,8 @@ const CustomerModal = ({ visible, onClose, onSubmit, customer, addToast }) => {
       });
 
       // Güncellenen veriyi onSubmit callback'ine gönder
-      onSubmit({ id: customer.id, ...customerData });
+      onSubmit({ id: formData.id, ...customerData });
+      addToast("Müşteri başarıyla güncellendi.", "success");
     } catch (err) {
       console.error("Müşteri Güncelleme Hatası:", {
         message: err.message,

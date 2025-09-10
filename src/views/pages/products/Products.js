@@ -293,6 +293,12 @@ const Products = () => {
       return;
     }
 
+    const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+    if (user.id === 0) {
+      addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "error");
+      return;
+    }
+
     setCategoryLoading(true);
     try {
       if (editingCategoryId) {
@@ -308,6 +314,7 @@ const Products = () => {
           ...existingCategory,
           adi: categoryName.trim(),
           guncellenmeTarihi: new Date().toISOString(),
+          KullaniciId: user.id,
         };
 
         await api.put(`${API_BASE_URL}/urunKategori/update`, categoryData);
@@ -321,6 +328,7 @@ const Products = () => {
           eklenmeTarihi: new Date().toISOString(),
           guncellenmeTarihi: new Date().toISOString(),
           durumu: 1,
+          KullaniciId: user.id,
         };
 
         await api.post(`${API_BASE_URL}/urunKategori/create`, categoryData);
@@ -355,6 +363,12 @@ const Products = () => {
       return;
     }
 
+    const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+    if (user.id === 0) {
+      addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "error");
+      return;
+    }
+
     setBrandLoading(true);
     try {
       if (editingBrandId) {
@@ -368,6 +382,7 @@ const Products = () => {
           ...existingBrand,
           adi: brandName.trim(),
           guncellenmeTarihi: new Date().toISOString(),
+          KullaniciId: user.id,
         };
 
         await api.put(`${API_BASE_URL}/urunMarka/update`, brandData);
@@ -381,6 +396,7 @@ const Products = () => {
           eklenmeTarihi: new Date().toISOString(),
           guncellenmeTarihi: new Date().toISOString(),
           durumu: 1,
+          KullaniciId: user.id,
         };
 
         await api.post(`${API_BASE_URL}/urunMarka/create`, brandData);
@@ -415,6 +431,12 @@ const Products = () => {
       return;
     }
 
+    const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+    if (user.id === 0) {
+      addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "error");
+      return;
+    }
+
     setShelfLoading(true);
     try {
       if (editingShelfId) {
@@ -428,6 +450,7 @@ const Products = () => {
           ...existingShelf,
           adi: shelfName.trim(),
           guncellenmeTarihi: new Date().toISOString(),
+          KullaniciId: user.id,
         };
 
         await api.put(`${API_BASE_URL}/urunRaf/update`, shelfData);
@@ -441,6 +464,7 @@ const Products = () => {
           eklenmeTarihi: new Date().toISOString(),
           guncellenmeTarihi: new Date().toISOString(),
           durumu: 1,
+          KullaniciId: user.id,
         };
 
         await api.post(`${API_BASE_URL}/urunRaf/create`, shelfData);
@@ -471,10 +495,16 @@ const Products = () => {
   };
 
   const handleDeleteCategory = async (categoryId) => {
+    const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+    if (user.id === 0) {
+      addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "error");
+      return;
+    }
+
     const deleteAction = async () => {
       setCategoryLoading(true);
       try {
-        await api.delete(`${API_BASE_URL}/urunKategori/delete/${categoryId}`);
+        await api.delete(`${API_BASE_URL}/urunKategori/delete/${categoryId}?kullaniciId=${user.id}`);
         await fetchData(`${API_BASE_URL}/urunKategori/get-all`, setCategories);
         addToast("Kategori başarıyla silindi.", "success");
       } catch (err) {
@@ -499,10 +529,16 @@ const Products = () => {
   };
 
   const handleDeleteBrand = async (brandId) => {
+    const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+    if (user.id === 0) {
+      addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "error");
+      return;
+    }
+
     const deleteAction = async () => {
       setBrandLoading(true);
       try {
-        await api.delete(`${API_BASE_URL}/urunMarka/delete/${brandId}`);
+        await api.delete(`${API_BASE_URL}/urunMarka/delete/${brandId}?kullaniciId=${user.id}`);
         await fetchData(`${API_BASE_URL}/urunMarka/get-all`, setBrands);
         addToast("Marka başarıyla silindi.", "success");
       } catch (err) {
@@ -527,10 +563,16 @@ const Products = () => {
   };
 
   const handleDeleteShelf = async (shelfId) => {
+    const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+    if (user.id === 0) {
+      addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "error");
+      return;
+    }
+
     const deleteAction = async () => {
       setShelfLoading(true);
       try {
-        await api.delete(`${API_BASE_URL}/urunRaf/delete/${shelfId}`);
+        await api.delete(`${API_BASE_URL}/urunRaf/delete/${shelfId}?kullaniciId=${user.id}`);
         await fetchData(`${API_BASE_URL}/urunRaf/get-all`, setShelves);
         addToast("Raf başarıyla silindi.", "success");
       } catch (err) {

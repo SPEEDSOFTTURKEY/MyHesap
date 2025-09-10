@@ -33,6 +33,7 @@ import CIcon from "@coreui/icons-react";
 import { cilPencil } from "@coreui/icons";
 import WarehouseModal from "../../../components/warehouses/WarehouseModal";
 import api from "../../../api/api";
+
 const API_BASE_URL = "https://localhost:44375/api";
 
 const WarehouseDetail = () => {
@@ -48,10 +49,32 @@ const WarehouseDetail = () => {
   const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [showAllTransferModal, setShowAllTransferModal] = useState(false);
   const [showSingleTransferModal, setShowSingleTransferModal] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [targetWarehouseId, setTargetWarehouseId] = useState("");
   const [transferQuantity, setTransferQuantity] = useState("");
   const toaster = useRef();
+
+  // Log user data when component mounts, similar to ProductNew
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const user = JSON.parse(localStorage.getItem("user")) || {
+          id: null,
+          username: "Unknown",
+          email: "Unknown",
+        };
+        console.log("Logged-in user data:", {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+        });
+      } catch (err) {
+        console.error("Error fetching user data:", err.message);
+      }
+    };
+    fetchUserData();
+  }, []);
 
   const addToast = (message, type = "success") => {
     const id = Date.now();
@@ -85,7 +108,7 @@ const WarehouseDetail = () => {
         throw new Error("Geçersiz depo ID'si.");
       }
       const { data } = await api.get(
-        `${API_BASE_URL}depo/get-by-id/${depoId}`,
+        `${API_BASE_URL}/depo/get-by-id/${depoId}`,
       );
       console.log("Warehouse API response:", data);
       if (!data || data.durumu !== 1) {
@@ -104,9 +127,7 @@ const WarehouseDetail = () => {
 
   const fetchWarehouses = async () => {
     try {
-      const { data } = await api.get(
-        `${API_BASE_URL}/depo/get-all`,
-      );
+      const { data } = await api.get(`${API_BASE_URL}/depo/get-all`);
       console.log("Warehouses API response:", data);
       const result = Array.isArray(data)
         ? data.filter(
@@ -115,8 +136,8 @@ const WarehouseDetail = () => {
               item.id !== parseInt(warehouse?.id || paramId),
           )
         : data?.durumu === 1 && data.id !== parseInt(warehouse?.id || paramId)
-          ? [data]
-          : [];
+        ? [data]
+        : [];
       setWarehouses(result);
     } catch (err) {
       console.error(
@@ -145,7 +166,7 @@ const WarehouseDetail = () => {
 
       const productsData = activeStocks.map((stock) => {
         try {
-          const productData = stock.urun; // Use the urun object directly from stock
+          const productData = stock.urun;
           console.log(`Product data for urunId ${stock.urunId}:`, productData);
           return {
             id: stock.id,
@@ -181,15 +202,24 @@ const WarehouseDetail = () => {
   };
 
   const handleTransferAll = async () => {
+    const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+    if (!user.id) {
+      addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "error");
+      return;
+    }
     if (!targetWarehouseId) {
       addToast("Lütfen hedef depo seçin.", "error");
       return;
     }
     try {
       setLoading(true);
-      await api.post(
-        `${API_BASE_URL}/depo/depo-tumurunleri-aktar/${warehouse.id}/${targetWarehouseId}`,
-      );
+      const payload = {
+        kaynakDepoId: warehouse.id,
+        hedefDepoId: parseInt(targetWarehouseId),
+        kullaniciId: user.id,
+      };
+      console.log("Transfer all payload:", payload);
+      await api.post(`${API_BASE_URL}/depo/depo-tumurunleri-aktar`, payload);
       addToast("Tüm ürünler başarıyla transfer edildi.", "success");
       setProducts([]);
       setShowAllTransferModal(false);
@@ -206,6 +236,11 @@ const WarehouseDetail = () => {
   };
 
   const handleTransferSingle = async () => {
+    const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+    if (!user.id) {
+      addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "error");
+      return;
+    }
     if (!targetWarehouseId) {
       addToast("Lütfen hedef depo seçin.", "error");
       return;
@@ -224,12 +259,11 @@ const WarehouseDetail = () => {
         id: selectedProduct.id,
         urunId: selectedProduct.urunId,
         miktar: parseInt(transferQuantity),
+        hedefDepoId: parseInt(targetWarehouseId),
+        kullaniciId: user.id,
       };
-      console.log("Transfer payload:", payload);
-      await api.post(
-        `${API_BASE_URL}i/depo/secili-urun-aktar/${targetWarehouseId}`,
-        payload,
-      );
+      console.log("Transfer single payload:", payload);
+      await api.post(`${API_BASE_URL}/depo/secili-urun-aktar`, payload);
       addToast("Ürün başarıyla transfer edildi.", "success");
       setProducts((prev) =>
         prev
@@ -265,9 +299,19 @@ const WarehouseDetail = () => {
   };
 
   const handleUpdateSubmit = async (formData) => {
+    const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+    if (!user.id) {
+      addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "error");
+      return;
+    }
     try {
       setLoading(true);
-      const payload = { id: warehouse.id, adi: formData.adi, durumu: 1 };
+      const payload = {
+        id: warehouse.id,
+        adi: formData.adi,
+        durumu: 1,
+        kullaniciId: user.id,
+      };
       console.log("Update payload:", payload);
       await api.put(`${API_BASE_URL}/depo/update`, payload);
       setWarehouse(payload);
@@ -279,6 +323,28 @@ const WarehouseDetail = () => {
         err.response?.data || err.message,
       );
       addToast(err.response?.data?.message || "Depo güncellenemedi.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+    if (!user.id) {
+      addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "error");
+      return;
+    }
+    try {
+      setLoading(true);
+      await api.delete(
+        `${API_BASE_URL}/depo/delete/${warehouse.id}?kullaniciId=${user.id}`,
+      );
+      addToast("Depo başarıyla silindi.", "success");
+      setShowDeleteModal(false);
+      navigate("/app/warehouses");
+    } catch (err) {
+      console.error("Silme hatası:", err.response?.data || err.message);
+      addToast(err.response?.data?.message || "Depo silinemedi.", "error");
     } finally {
       setLoading(false);
     }
@@ -396,6 +462,13 @@ const WarehouseDetail = () => {
                 </CDropdownItem>
               </CDropdownMenu>
             </CDropdown>
+            <CButton
+              color="danger"
+              style={{ color: "white" }}
+              onClick={() => setShowDeleteModal(true)}
+            >
+              Sil
+            </CButton>
           </div>
         </CCol>
         <CCol xs={12}>
@@ -570,6 +643,36 @@ const WarehouseDetail = () => {
               setTargetWarehouseId("");
               setTransferQuantity("");
             }}
+            disabled={loading}
+          >
+            İptal
+          </CButton>
+        </CModalFooter>
+      </CModal>
+
+      {/* Depo Silme Modal'ı */}
+      <CModal
+        visible={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        backdrop="static"
+      >
+        <CModalHeader>
+          <CModalTitle>Depo Sil</CModalTitle>
+        </CModalHeader>
+        <CModalBody>
+          <p>Bu depoyu silmek istediğinize emin misiniz? Bu işlem geri alınamaz.</p>
+        </CModalBody>
+        <CModalFooter>
+          <CButton
+            color="danger"
+            onClick={handleDelete}
+            disabled={loading}
+          >
+            Sil
+          </CButton>
+          <CButton
+            color="secondary"
+            onClick={() => setShowDeleteModal(false)}
             disabled={loading}
           >
             İptal

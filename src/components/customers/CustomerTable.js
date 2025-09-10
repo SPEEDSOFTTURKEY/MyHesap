@@ -14,7 +14,7 @@ import {
 } from "@coreui/react";
 import CIcon from "@coreui/icons-react";
 import { cilPen, cilTrash } from "@coreui/icons";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import api from "../../api/api";
 import CustomerModal from "./CustomerModal";
 import ErrorBoundary from "../../views/pages/products/ErrorBoundary";
@@ -27,17 +27,36 @@ const CustomerTable = ({ customers, onCustomerClick, fetchCustomers }) => {
   const [selectedCustomerId, setSelectedCustomerId] = useState(null);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [userInfo, setUserInfo] = useState(null);
+
+  // Kullanıcı bilgilerini al
+  useEffect(() => {
+    // localStorage'dan kullanıcı bilgilerini al
+    const userData = localStorage.getItem("user");
+    if (userData) {
+      const user = JSON.parse(userData);
+      setUserInfo(user);
+      console.log("Giriş yapan kullanıcı bilgileri:", user);
+    }
+  }, []);
 
   const addToast = (message, type = "success") => {
     alert(message);
   };
 
   const handleDelete = async () => {
+    if (!userInfo || !userInfo.id) {
+      addToast("Kullanıcı bilgileri bulunamadı.", "error");
+      return;
+    }
+
     try {
       setLoading(true);
-      await api.delete(`${API_BASE_URL}/musteri/musteri-delete/${selectedCustomerId}`);
+      // Müşteri ID'si ve kullanıcı ID'sini birlikte gönder
+      await api.delete(`${API_BASE_URL}/musteri/musteri-delete/${selectedCustomerId}?kullaniciId=${userInfo.id}`);
       fetchCustomers();
       setShowDeleteModal(false);
+      addToast("Müşteri başarıyla silindi.", "success");
     } catch (err) {
       console.error("Silme Hatası:", err);
       addToast(err.response?.data?.message || "Müşteri silinemedi.", "error");
@@ -137,7 +156,7 @@ const CustomerTable = ({ customers, onCustomerClick, fetchCustomers }) => {
           visible={showUpdateModal}
           onClose={() => setShowUpdateModal(false)}
           onSubmit={(data) => {
-            fetchCustomers(data.id); // Güncellenen müşterinin ID'sini ileterek modalı aç
+            fetchCustomers(data.id);
             setShowUpdateModal(false);
           }}
           customer={selectedCustomer}

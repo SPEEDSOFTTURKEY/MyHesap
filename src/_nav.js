@@ -149,12 +149,12 @@ const _nav = [
       //   to: "/app/membership-detail",
       //   icon: <CIcon icon={cilUser} customClassName="nav-icon" />,
       // },
-      {
-        component: CNavItem,
-        name: "Tanımlar",
-        to: "/app/definitions",
-        icon: <CIcon icon={cilExcerpt} customClassName="nav-icon" />,
-      },
+      // {
+      //   component: CNavItem,
+      //   name: "Tanımlar",
+      //   to: "/app/definitions",
+      //   icon: <CIcon icon={cilExcerpt} customClassName="nav-icon" />,
+      // },
       {
         component: CNavItem,
         name: "Menu Düzeni",

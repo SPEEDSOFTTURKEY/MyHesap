@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   CButton,
@@ -28,6 +28,7 @@ import ProductDefinition from "../../../components/products/ProductDefinition";
 import Pricing from "../../../components/products/Pricing";
 import OtherInfo from "../../../components/products/OtherInfo";
 import api from "../../../api/api";
+
 const API_BASE_URL = "https://localhost:44375/api";
 
 const ProductNew = () => {
@@ -76,6 +77,27 @@ const ProductNew = () => {
   const [shelfLoading, setShelfLoading] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
+  // Log user data when component mounts
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const user = JSON.parse(localStorage.getItem("user")) || {
+          id: null,
+          username: "Unknown",
+          email: "Unknown",
+        };
+        console.log("Logged-in user data:", {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+        });
+      } catch (err) {
+        console.error("Error fetching user data:", err.message);
+      }
+    };
+    fetchUserData();
+  }, []);
+
   const addToast = (message, type = "success") => {
     const toast = (
       <CToast key={Date.now()} autohide visible delay={5000}>
@@ -103,12 +125,14 @@ const ProductNew = () => {
     }
     setCategoryLoading(true);
     try {
+      const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
       const response = await api.post(`${API_BASE_URL}/urunKategori/create`, {
         id: 0,
         adi: categoryName.trim(),
         eklenmeTarihi: new Date().toISOString(),
         guncellenmeTarihi: new Date().toISOString(),
         durumu: 1,
+        KullaniciId: user.id,
       });
       addToast("Kategori başarıyla eklendi.");
       setShowCategoryModal(false);
@@ -137,12 +161,14 @@ const ProductNew = () => {
     }
     setBrandLoading(true);
     try {
+      const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
       const response = await api.post(`${API_BASE_URL}/urunMarka/create`, {
         id: 0,
         adi: brandName.trim(),
         eklenmeTarihi: new Date().toISOString(),
         guncellenmeTarihi: new Date().toISOString(),
         durumu: 1,
+        KullaniciId: user.id,
       });
       addToast("Marka başarıyla eklendi.");
       setShowBrandModal(false);
@@ -171,12 +197,14 @@ const ProductNew = () => {
     }
     setShelfLoading(true);
     try {
+      const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
       const response = await api.post(`${API_BASE_URL}/urunRaf/create`, {
         id: 0,
         adi: shelfName.trim(),
         eklenmeTarihi: new Date().toISOString(),
         guncellenmeTarihi: new Date().toISOString(),
         durumu: 1,
+        KullaniciId: user.id,
       });
       addToast("Raf başarıyla eklendi.");
       setShowShelfModal(false);
@@ -235,6 +263,7 @@ const ProductNew = () => {
         );
       }
 
+      const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
       const productFormData = new FormData();
       productFormData.append("Adi", formData.name);
       productFormData.append("UrunTipi", formData.type === "Stoklu");
@@ -279,6 +308,7 @@ const ProductNew = () => {
       );
       productFormData.append("Etiketler", formData.tags || "");
       productFormData.append("ParaBirimi", formData.saleCurrency);
+      productFormData.append("KullaniciId", user.id);
 
       if (formData.images.length > 0) {
         formData.images.forEach((img) =>

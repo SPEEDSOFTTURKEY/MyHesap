@@ -270,7 +270,7 @@ const routes = [
   },
   { path: "users", name: "Kullanıcılar", element: Users },
   { path: "user-detail/:id", name: "Kullanıcı Detay", element: UserDetail },
-  { path: "definitions", name: "Tanımlar", element: Definitions },
+  // { path: "definitions", name: "Tanımlar", element: Definitions },
   { path: "menu", name: "Menü Düzeni", element: MenuLayout },
   { path: "e-invoice", name: "E-Fatura", element: EFatura },
   { path: "theme", name: "Theme", element: Colors, exact: true },

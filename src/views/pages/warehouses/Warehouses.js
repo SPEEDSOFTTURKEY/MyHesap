@@ -24,6 +24,7 @@ const Warehouses = () => {
   const [toasts, setToasts] = useState([]);
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [editingWarehouse, setEditingWarehouse] = useState(null);
   const toaster = useRef();
   const navigate = useNavigate();
 
@@ -54,9 +55,7 @@ const Warehouses = () => {
   const fetchWarehouses = async () => {
     try {
       setLoading(true);
-      const { data } = await api.get(
-        `${API_BASE_URL}/depo/get-all`,
-      );
+      const { data } = await api.get(`${API_BASE_URL}/depo/get-all`);
       const result = Array.isArray(data)
         ? data.filter((item) => item.durumu === 1)
         : [];
@@ -73,13 +72,20 @@ const Warehouses = () => {
   }, []);
 
   const handleAddWarehouse = async (formData) => {
+    const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+    if (user.id === 0) {
+      addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "error");
+      return;
+    }
+
     try {
       setLoading(true);
-      const payload = { adi: formData.adi, durumu: 1 };
-      const { data } = await api.post(
-        `${API_BASE_URL}/depo/create`,
-        payload,
-      );
+      const payload = {
+        adi: formData.adi,
+        durumu: 1,
+        KullaniciId: user.id,
+      };
+      const { data } = await api.post(`${API_BASE_URL}/depo/create`, payload);
       setWarehouses((prev) => [...prev, data]);
       setShowModal(false);
       addToast("Depo başarıyla eklendi.", "success");
@@ -88,6 +94,44 @@ const Warehouses = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleUpdateWarehouse = async (formData) => {
+    const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+    if (user.id === 0) {
+      addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "error");
+      return;
+    }
+
+    if (!editingWarehouse) {
+      addToast("Düzenlenecek depo bulunamadı.", "error");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const payload = {
+        ...editingWarehouse,
+        adi: formData.adi,
+        durumu: 1,
+        KullaniciId: user.id,
+        guncellenmeTarihi: new Date().toISOString(),
+      };
+      await api.put(`${API_BASE_URL}/depo/update`, payload);
+      await fetchWarehouses();
+      setShowModal(false);
+      setEditingWarehouse(null);
+      addToast("Depo başarıyla güncellendi.", "success");
+    } catch (err) {
+      addToast(err.response?.data?.message || "Depo güncellenemedi.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditWarehouse = (warehouse) => {
+    setEditingWarehouse(warehouse);
+    setShowModal(true);
   };
 
   const handleWarehouseClick = (warehouse) => {
@@ -103,7 +147,10 @@ const Warehouses = () => {
         <CButton
           color="success"
           className="text-light"
-          onClick={() => setShowModal(true)}
+          onClick={() => {
+            setEditingWarehouse(null);
+            setShowModal(true);
+          }}
           disabled={loading}
         >
           <CIcon icon={cilPlus} size="m" /> Yeni Depo Ekle
@@ -148,15 +195,20 @@ const Warehouses = () => {
           <WarehouseTable
             warehouses={warehouses}
             onWarehouseClick={handleWarehouseClick}
+            onEditWarehouse={handleEditWarehouse}
           />
         </CCardBody>
       </CCard>
 
       <WarehouseModal
         visible={showModal}
-        onClose={() => setShowModal(false)}
-        onSubmit={handleAddWarehouse}
+        onClose={() => {
+          setShowModal(false);
+          setEditingWarehouse(null);
+        }}
+        onSubmit={editingWarehouse ? handleUpdateWarehouse : handleAddWarehouse}
         loading={loading}
+        editingWarehouse={editingWarehouse}
       />
     </>
   );
