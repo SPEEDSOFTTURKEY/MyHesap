@@ -63,11 +63,23 @@ const Expenses = () => {
   const [toast, setToast] = useState(null);
   const toaster = useRef();
 
+  // Kullanıcı ID'sini al
+  const getUserId = () => {
+    try {
+      const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+      return user.id;
+    } catch (err) {
+      console.error("Kullanıcı ID'si alınırken hata:", err);
+      return 0;
+    }
+  };
+
   const fetchExpenses = async () => {
     setIsLoading(true);
     try {
-      const response = await api.get(`${API_BASE_URL}/masraf/masraf-get-all`);
-      setExpenses(response.data);
+      const { data } = await api.get(`${API_BASE_URL}/masraf/masraf-get-all`);
+      console.log("Masraflar API response (masraf-get-all):", data);
+      setExpenses(data);
     } catch (error) {
       console.error(
         "Masraflar çekilirken hata oluştu:",
@@ -84,10 +96,11 @@ const Expenses = () => {
 
   const fetchMainCategories = async () => {
     try {
-      const response = await api.get(
+      const { data } = await api.get(
         `${API_BASE_URL}/masrafAnaKategori/masrafAnaKategori-get-all`,
       );
-      setMainCategories(response.data);
+      console.log("Ana Kategoriler API response (masrafAnaKategori-get-all):", data);
+      setMainCategories(data);
     } catch (error) {
       console.error(
         "Ana kategoriler çekilirken hata oluştu:",
@@ -102,10 +115,11 @@ const Expenses = () => {
 
   const fetchSubCategories = async () => {
     try {
-      const response = await api.get(
+      const { data } = await api.get(
         `${API_BASE_URL}/masrafAltKategori/masrafAltKategori-get-all`,
       );
-      setSubCategories(response.data);
+      console.log("Alt Kategoriler API response (masrafAltKategori-get-all):", data);
+      setSubCategories(data);
     } catch (error) {
       console.error(
         "Alt kategoriler çekilirken hata:",
@@ -120,10 +134,19 @@ const Expenses = () => {
 
   const handleUploadSubmit = async (e) => {
     e.preventDefault();
+    const userId = getUserId();
+    if (!userId) {
+      setToast({
+        message: "Geçerli bir kullanıcı oturumu bulunamadı.",
+        color: "danger",
+      });
+      return;
+    }
+    
     setIsLoading(true);
 
     const formData = new FormData();
-    formData.append("id", uploadModal.id);
+    formData.append("Id", uploadModal.id.toString());
     formData.append("arsiv", uploadData.arsiv);
     formData.append("Arsiv", uploadData.Arsiv);
     formData.append("HesapId", uploadModal.hesapId);
@@ -141,11 +164,19 @@ const Expenses = () => {
     formData.append("MasrafAltKategoriId", uploadModal.masrafAltKategoriId);
     formData.append("MasrafAnaKategoriId", uploadModal.MasrafAnaKategoriId);
     formData.append("KDVOrani", uploadModal.kdvOrani);
+    formData.append("kullaniciId", userId);
+
+    console.log("Belge yükleme payload:", {
+      id: uploadModal.id,
+      hasFile: !!uploadData.arsiv,
+      userId: userId,
+    });
 
     try {
-      await api.put(`${API_BASE_URL}/masraf/masraf-update`, formData, {
+      const response = await api.put(`${API_BASE_URL}/masraf/masraf-update`, formData, {
         headers: { "Content-Type": "multipart/form-data", accept: "*/*" },
       });
+      console.log("Belge yükleme API response (masraf-update):", response.data);
       await fetchExpenses();
       setToast({
         message: "Belge başarıyla yüklendi.",
@@ -159,7 +190,7 @@ const Expenses = () => {
         error.response?.data || error.message,
       );
       setToast({
-        message: `Belge yüklenirken hata: ${error.response?.data?.title || error.message}`,
+        message: `Belge yüklenirken hata: ${error.response?.data?.message || error.message}`,
         color: "danger",
       });
     } finally {
@@ -189,11 +220,27 @@ const Expenses = () => {
       setShowDeleteModal(false);
       return;
     }
+    
+    const userId = getUserId();
+    if (!userId) {
+      setToast({
+        message: "Geçerli bir kullanıcı oturumu bulunamadı.",
+        color: "danger",
+      });
+      setShowDeleteModal(false);
+      return;
+    }
+
     setIsLoading(true);
     try {
-      await api.delete(`${API_BASE_URL}/masraf/masraf-delete/${expenseToDelete.id}`, {
-        headers: { accept: "*/*" },
-      });
+      console.log("Masraf silme isteği: ID =", expenseToDelete.id, "Kullanıcı ID =", userId);
+      
+      const response = await api.delete(
+        `${API_BASE_URL}/masraf/masraf-delete/${expenseToDelete.id}?kullaniciId=${userId}`,
+        { headers: { accept: "*/*" } },
+      );
+      console.log("Masraf delete API response (masraf-delete):", response.data);
+      
       await fetchExpenses();
       setToast({
         message: "Masraf başarıyla silindi.",
@@ -205,7 +252,7 @@ const Expenses = () => {
         error.response?.data || error.message,
       );
       setToast({
-        message: `Masraf silinirken hata: ${error.response?.data?.title || error.message}`,
+        message: `Masraf silinirken hata: ${error.response?.data?.message || error.message}`,
         color: "danger",
       });
     } finally {

@@ -73,10 +73,11 @@ const Suppliers = () => {
     async (url, setData) => {
       try {
         const { data } = await api.get(url);
+        console.log(`API Response for ${url}:`, data);
         const result = Array.isArray(data) ? data : [data];
         const filtered = result.filter((item) => item.durumu === 1);
         setData(filtered);
-        console.log(`fetchData (${url}) sonucu:`, filtered);
+        console.log(`fetchData (${url}) filtered result:`, filtered);
         return filtered;
       } catch (err) {
         console.error(`fetchData Hatası (${url}):`, {
@@ -95,6 +96,8 @@ const Suppliers = () => {
   );
 
   const mapApiSupplierToLocal = (apiSupplier, classifications) => {
+    console.log("Mapping supplier data:", apiSupplier);
+
     const classification = apiSupplier.tedarikciSiniflandirmaId
       ? classifications.find(
           (c) => c.id === apiSupplier.tedarikciSiniflandirmaId,
@@ -108,7 +111,7 @@ const Suppliers = () => {
       );
     }
 
-    return {
+    const mappedSupplier = {
       id: apiSupplier.id,
       name: apiSupplier.unvan || "Bilinmiyor",
       openBalance: apiSupplier.acilisBakiyesi || 0,
@@ -130,6 +133,9 @@ const Suppliers = () => {
       // Add API fields for update operations
       tedarikciSiniflandirmaId: apiSupplier.tedarikciSiniflandirmaId,
     };
+
+    console.log("Mapped supplier:", mappedSupplier);
+    return mappedSupplier;
   };
 
   const fetchSuppliers = useCallback(async () => {
@@ -147,7 +153,7 @@ const Suppliers = () => {
         ? `${API_BASE_URL}/tedarikci/tedarikci-get-all`
         : `${API_BASE_URL}/tedarikci/tedarikci-get-allaktif`;
       const { data } = await api.get(url);
-      console.log("Tedarikçi verileri:", data);
+      console.log("Suppliers API response:", data);
       const mappedSuppliers = data
         .filter((supplier) => supplier.durumu === 1)
         .map((supplier) =>
@@ -187,12 +193,20 @@ const Suppliers = () => {
 
     setDeleteLoading(true);
     try {
-      console.log("Silme isteği gönderiliyor: ID =", supplierToDelete);
+      const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+      if (!user.id) {
+        addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "error");
+        return;
+      }
+
+      console.log("Silme isteği gönderiliyor: ID =", supplierToDelete, "Kullanıcı ID =", user.id);
 
       const response = await api.delete(
-        `${API_BASE_URL}/tedarikci/tedarikci-delete/${supplierToDelete}`,
+        `${API_BASE_URL}/tedarikci/tedarikci-delete/${supplierToDelete}?kullaniciId=${user.id}`,
         { headers: { accept: "*/*" } },
       );
+
+      console.log("Delete API response (tedarikci/tedarikci-delete):", response.data);
 
       if (response.status === 200 || response.status === 204) {
         addToast("Tedarikçi başarıyla silindi.", "success");
@@ -243,12 +257,17 @@ const Suppliers = () => {
 
   const handleDownloadTemplate = async () => {
     try {
+      const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+      console.log("Download template request with user ID:", user.id);
+      
       const response = await api.get(
-        `${API_BASE_URL}/tedarikci/download-template`,
+        `${API_BASE_URL}/tedarikci/download-template?kullaniciId=${user.id}`,
         {
           responseType: "blob",
         },
       );
+      console.log("Download template API response status:", response.status);
+      
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement("a");
       link.href = url;
@@ -259,6 +278,11 @@ const Suppliers = () => {
       window.URL.revokeObjectURL(url);
       addToast("Excel şablonu başarıyla indirildi.", "success");
     } catch (err) {
+      console.error("Download template error:", {
+        message: err.message,
+        status: err.response?.status,
+        data: err.response?.data,
+      });
       addToast(
         err.response?.data?.message || "Excel şablonu indirilemedi.",
         "error",
@@ -277,9 +301,19 @@ const Suppliers = () => {
     }
     setUploadLoading(true);
     try {
+      const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+      if (!user.id) {
+        addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "error");
+        return;
+      }
+
       const formData = new FormData();
       formData.append("file", selectedFile);
-      await api.post(
+      formData.append("kullaniciId", user.id);
+
+      console.log("Excel upload payload with user ID:", user.id);
+      
+      const response = await api.post(
         `${API_BASE_URL}/tedarikci/upload-excel`,
         formData,
         {
@@ -289,11 +323,18 @@ const Suppliers = () => {
           },
         },
       );
+      console.log("Excel upload API response:", response.data);
+      
       await fetchSuppliers();
       addToast("Excel dosyası başarıyla yüklendi.", "success");
       setShowExcelModal(false);
       setSelectedFile(null);
     } catch (err) {
+      console.error("Excel upload error:", {
+        message: err.message,
+        status: err.response?.status,
+        data: err.response?.data,
+      });
       addToast(
         err.response?.data?.message || "Excel dosyası yüklenemedi.",
         "error",

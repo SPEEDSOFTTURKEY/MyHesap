@@ -42,6 +42,17 @@ const Credits = () => {
   };
 const API_BASE_URL = "https://localhost:44375/api";
 
+  // Kullanıcı ID'sini al
+  const getUserId = () => {
+    try {
+      const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+      return user.id;
+    } catch (err) {
+      console.error("Kullanıcı ID'si alınırken hata:", err);
+      return 0;
+    }
+  };
+
   const addToast = (message, type = "success") => {
     const toast = (
       <CToast key={Date.now()} autohide={true} visible={true} delay={5000}>
@@ -59,13 +70,14 @@ const API_BASE_URL = "https://localhost:44375/api";
   const fetchAccounts = async () => {
     setLoading(true);
     try {
-      const response = await axios.get(
+      const { data } = await axios.get(
         `${API_BASE_URL}/Hesap/hesap-get-allaktif`,
         {
           headers: { accept: "*/*" },
         },
       );
-      setAccounts(response.data);
+      console.log("Hesaplar API response (Hesap/hesap-get-allaktif):", data);
+      setAccounts(data);
       setError(null);
     } catch (err) {
       const errorMessage =
@@ -80,28 +92,31 @@ const API_BASE_URL = "https://localhost:44375/api";
   const fetchCredits = async () => {
     setLoading(true);
     try {
-      const response = await axios.get(
+      const { data } = await axios.get(
         `${API_BASE_URL}/kredi/get-all`,
         {
           headers: { accept: "*/*" },
         },
       );
+      console.log("Krediler API response (kredi/get-all):", data);
 
-      const mappedCredits = response.data.map((credit) => ({
-        id: credit.id,
-        name: credit.adi || `Kredi ${credit.id}`,
-        totalAmount: credit.kalanBorc || 0,
-        remainingAmount: credit.kalanBorc || 0,
-        installmentCount: credit.kalanTaksit || 0,
-        nextPaymentDate: credit.ilkTaksitTarih
-          ? new Date(credit.ilkTaksitTarih).toISOString()
-          : new Date().toISOString(),
-        paymentSchedule: paymentScheduleMap[credit.odemeTakvim] || "monthly",
-        accountId: credit.hesapId || 0,
-        account: credit.hesap || { tanim: "Bilinmeyen Hesap" },
-        notes: credit.notlar || "",
-        durumu: credit.durumu !== undefined ? credit.durumu : 1,
-      }));
+      const mappedCredits = data
+        .filter((credit) => credit.durumu === 1)
+        .map((credit) => ({
+          id: credit.id,
+          name: credit.adi || `Kredi ${credit.id}`,
+          totalAmount: credit.kalanBorc || 0,
+          remainingAmount: credit.kalanBorc || 0,
+          installmentCount: credit.kalanTaksit || 0,
+          nextPaymentDate: credit.ilkTaksitTarih
+            ? new Date(credit.ilkTaksitTarih).toISOString()
+            : new Date().toISOString(),
+          paymentSchedule: paymentScheduleMap[credit.odemeTakvim] || "monthly",
+          accountId: credit.hesapId || 0,
+          account: credit.hesap || { tanim: "Bilinmeyen Hesap" },
+          notes: credit.notlar || "",
+          durumu: credit.durumu !== undefined ? credit.durumu : 1,
+        }));
 
       setCredits(mappedCredits);
       calculatePayments(mappedCredits);
@@ -109,7 +124,7 @@ const API_BASE_URL = "https://localhost:44375/api";
     } catch (err) {
       const errorMessage =
         err.response?.data?.message || "Krediler yüklenemedi.";
-      setError(errorMessage);
+      console.error("Krediler yüklenemedi:", err);
       addToast(errorMessage, "error");
     } finally {
       setLoading(false);
@@ -166,25 +181,37 @@ const API_BASE_URL = "https://localhost:44375/api";
   };
 
   const handleModalSubmit = async (creditData) => {
+    const userId = getUserId();
+    if (!userId) {
+      addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "error");
+      return;
+    }
+    
     try {
       const odemeTakvim =
         Object.keys(paymentScheduleMap).find(
           (key) => paymentScheduleMap[key] === creditData.paymentSchedule,
         ) || 1;
 
+      const payload = {
+        Adi: creditData.name,
+        KalanBorc: parseFloat(creditData.remainingAmount),
+        KalanTaksit: parseInt(creditData.installmentCount),
+        IlkTaksitTarih: creditData.nextPaymentDate,
+        OdemeTakvim: odemeTakvim,
+        HesapId: parseInt(creditData.accountId),
+        Notlar: creditData.notes,
+        Durumu: 1,
+        kullaniciId: userId, // Kullanıcı ID'si eklendi
+      };
+
+      console.log("Kredi create payload:", payload);
+
       const response = await axios.post(
         `${API_BASE_URL}/kredi/create`,
-        {
-          Adi: creditData.name,
-          KalanBorc: parseFloat(creditData.remainingAmount),
-          KalanTaksit: parseInt(creditData.installmentCount),
-          IlkTaksitTarih: creditData.nextPaymentDate,
-          OdemeTakvim: odemeTakvim,
-          HesapId: parseInt(creditData.accountId),
-          Notlar: creditData.notes,
-          Durumu: 1,
-        },
+        payload,
       );
+      console.log("Kredi create API response (kredi/create):", response.data);
 
       if (response.data) {
         addToast("Kredi başarıyla eklendi.", "success");

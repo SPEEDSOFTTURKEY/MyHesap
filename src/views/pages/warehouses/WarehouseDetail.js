@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
@@ -55,7 +56,7 @@ const WarehouseDetail = () => {
   const [transferQuantity, setTransferQuantity] = useState("");
   const toaster = useRef();
 
-  // Log user data when component mounts, similar to ProductNew
+  // Log user data when component mounts
   useEffect(() => {
     const fetchUserData = async () => {
       try {
@@ -110,7 +111,7 @@ const WarehouseDetail = () => {
       const { data } = await api.get(
         `${API_BASE_URL}/depo/get-by-id/${depoId}`,
       );
-      console.log("Warehouse API response:", data);
+      console.log("Warehouse API response (depo/get-by-id):", data);
       if (!data || data.durumu !== 1) {
         throw new Error("Depo bulunamadı veya aktif değil.");
       }
@@ -128,7 +129,7 @@ const WarehouseDetail = () => {
   const fetchWarehouses = async () => {
     try {
       const { data } = await api.get(`${API_BASE_URL}/depo/get-all`);
-      console.log("Warehouses API response:", data);
+      console.log("Warehouses API response (depo/get-all):", data);
       const result = Array.isArray(data)
         ? data.filter(
             (item) =>
@@ -155,7 +156,7 @@ const WarehouseDetail = () => {
       const { data: stockData } = await api.get(
         `${API_BASE_URL}/depo/depolardaki-urunstoklar/${depoId}`,
       );
-      console.log("Stock API response:", stockData);
+      console.log("Stock API response (depo/depolardaki-urunstoklar):", stockData);
 
       if (!Array.isArray(stockData)) {
         throw new Error("Stok verisi dizi formatında değil.");
@@ -168,15 +169,18 @@ const WarehouseDetail = () => {
         try {
           const productData = stock.urun;
           console.log(`Product data for urunId ${stock.urunId}:`, productData);
+          const alisFiyat = productData?.alisFiyat || 0;
+          const satisFiyat = productData?.satisFiyat || 0;
+          const miktar = stock.miktar ?? 0;
           return {
             id: stock.id,
             code: productData?.urunKodu || "Bilinmeyen Kod",
             barcode: productData?.barkod || "Bilinmeyen Barkod",
             brand: productData?.urunMarka?.adi || "Bilinmeyen Marka",
             name: productData?.adi || "Bilinmeyen Ürün",
-            quantity: stock.miktar ?? 0,
-            value: (stock.fiyat ?? 0) * (stock.miktar ?? 0),
-            unitCost: stock.fiyat ?? 0,
+            quantity: miktar,
+            alisFiyat: alisFiyat,
+            satisFiyat: satisFiyat,
             urunId: stock.urunId,
             depoId: stock.depoId,
           };
@@ -213,14 +217,11 @@ const WarehouseDetail = () => {
     }
     try {
       setLoading(true);
-      const payload = {
-        kaynakDepoId: warehouse.id,
-        hedefDepoId: parseInt(targetWarehouseId),
-        kullaniciId: user.id,
-      };
-      console.log("Transfer all payload:", payload);
-      await api.post(`${API_BASE_URL}/depo/depo-tumurunleri-aktar`, payload);
-      addToast("Tüm ürünler başarıyla transfer edildi.", "success");
+      const response = await api.post(
+        `${API_BASE_URL}/depo/depo-tumurunleri-aktar/${warehouse.id}/${targetWarehouseId}?kullaniciId=${user.id}`,
+      );
+      console.log("Transfer all API response (depo/depo-tumurunleri-aktar):", response.data);
+      addToast(response.data.mesaj || "Tüm ürünler başarıyla transfer edildi.", "success");
       setProducts([]);
       setShowAllTransferModal(false);
       setTargetWarehouseId("");
@@ -259,12 +260,15 @@ const WarehouseDetail = () => {
         id: selectedProduct.id,
         urunId: selectedProduct.urunId,
         miktar: parseInt(transferQuantity),
-        hedefDepoId: parseInt(targetWarehouseId),
         kullaniciId: user.id,
       };
       console.log("Transfer single payload:", payload);
-      await api.post(`${API_BASE_URL}/depo/secili-urun-aktar`, payload);
-      addToast("Ürün başarıyla transfer edildi.", "success");
+      const response = await api.post(
+        `${API_BASE_URL}/depo/secili-urun-aktar/${targetWarehouseId}`,
+        payload,
+      );
+      console.log("Transfer single API response (depo/secili-urun-aktar):", response.data);
+      addToast(response.data.mesaj || "Ürün başarıyla transfer edildi.", "success");
       setProducts((prev) =>
         prev
           .map((product) =>
@@ -292,10 +296,39 @@ const WarehouseDetail = () => {
     }
   };
 
-  const handleStockCount = () => {
-    navigate(`/app/warehouses/${warehouse.id}/stock-count`, {
-      state: { warehouse },
-    });
+  const handleStockCount = async () => {
+    const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+    if (!user.id) {
+      addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "error");
+      return;
+    }
+    try {
+      setLoading(true);
+      const payload = products.map((product) => ({
+        urunId: product.urunId,
+        miktar: product.quantity,
+        fiyat: product.alisFiyat,
+        kullaniciId: user.id,
+      }));
+      console.log("Stock count payload:", payload);
+      const response = await api.post(
+        `${API_BASE_URL}/depo/stok-sayim/${warehouse.id}`,
+        payload,
+      );
+      console.log("Stock count API response (depo/stok-sayim):", response.data);
+      addToast(response.data.mesaj || "Stok sayımı başarıyla tamamlandı.", "success");
+      navigate(`/app/warehouses/${warehouse.id}/stock-count`, {
+        state: { warehouse },
+      });
+    } catch (err) {
+      console.error("Stok sayım hatası:", err.response?.data || err.message);
+      addToast(
+        err.response?.data?.mesaj || "Stok sayımı başarısız.",
+        "error",
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleUpdateSubmit = async (formData) => {
@@ -313,16 +346,20 @@ const WarehouseDetail = () => {
         kullaniciId: user.id,
       };
       console.log("Update payload:", payload);
-      await api.put(`${API_BASE_URL}/depo/update`, payload);
+      const response = await api.put(`${API_BASE_URL}/depo/update`, payload);
+      console.log("Update API response (depo/update):", response.data);
       setWarehouse(payload);
       setShowUpdateModal(false);
-      addToast("Depo güncellendi.", "success");
+      addToast(response.data.message || "Depo güncellendi.", "success");
     } catch (err) {
       console.error(
         "Depo güncelleme hatası:",
         err.response?.data || err.message,
       );
-      addToast(err.response?.data?.message || "Depo güncellenemedi.", "error");
+      addToast(
+        err.response?.data?.message || "Depo güncellenemedi.",
+        "error",
+      );
     } finally {
       setLoading(false);
     }
@@ -336,15 +373,19 @@ const WarehouseDetail = () => {
     }
     try {
       setLoading(true);
-      await api.delete(
+      const response = await api.delete(
         `${API_BASE_URL}/depo/delete/${warehouse.id}?kullaniciId=${user.id}`,
       );
-      addToast("Depo başarıyla silindi.", "success");
+      console.log("Delete API response (depo/delete):", response.data);
+      addToast(response.data.message || "Depo başarıyla silindi.", "success");
       setShowDeleteModal(false);
       navigate("/app/warehouses");
     } catch (err) {
       console.error("Silme hatası:", err.response?.data || err.message);
-      addToast(err.response?.data?.message || "Depo silinemedi.", "error");
+      addToast(
+        err.response?.data?.message || "Depo silinemedi.",
+        "error",
+      );
     } finally {
       setLoading(false);
     }
@@ -382,8 +423,13 @@ const WarehouseDetail = () => {
       (product.name || "").toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
-  const totalStockValue = products.reduce(
-    (sum, product) => sum + (product.value || 0),
+  const totalAlisDegeri = products.reduce(
+    (sum, product) => sum + (product.alisFiyat || 0),
+    0,
+  );
+
+  const totalSatisDegeri = products.reduce(
+    (sum, product) => sum + (product.satisFiyat || 0),
     0,
   );
 
@@ -420,14 +466,26 @@ const WarehouseDetail = () => {
             </CCardHeader>
             <CCardBody>
               <CRow>
-                <CCol>
+                <CCol md={6}>
                   <CCard>
                     <CCardHeader className="bg-info" style={{ color: "white" }}>
-                      Toplam Stok Değeri
+                      Toplam Alış Değeri
                     </CCardHeader>
                     <CCardBody>
                       <p className="fw-bold">
-                        {totalStockValue.toLocaleString("tr-TR")} TRY
+                        {totalAlisDegeri.toLocaleString("tr-TR")} TRY
+                      </p>
+                    </CCardBody>
+                  </CCard>
+                </CCol>
+                <CCol md={6}>
+                  <CCard>
+                    <CCardHeader className="bg-success" style={{ color: "white" }}>
+                      Toplam Satış Değeri
+                    </CCardHeader>
+                    <CCardBody>
+                      <p className="fw-bold">
+                        {totalSatisDegeri.toLocaleString("tr-TR")} TRY
                       </p>
                     </CCardBody>
                   </CCard>
@@ -492,7 +550,8 @@ const WarehouseDetail = () => {
                     <CTableHeaderCell>Marka</CTableHeaderCell>
                     <CTableHeaderCell>Ürün</CTableHeaderCell>
                     <CTableHeaderCell>Miktar</CTableHeaderCell>
-                    <CTableHeaderCell>Değeri (TL)</CTableHeaderCell>
+                    <CTableHeaderCell>Alış Fiyatı (TL)</CTableHeaderCell>
+                    <CTableHeaderCell>Satış Fiyatı (TL)</CTableHeaderCell>
                     <CTableHeaderCell>Transfer</CTableHeaderCell>
                   </CTableRow>
                 </CTableHead>
@@ -505,7 +564,10 @@ const WarehouseDetail = () => {
                       <CTableDataCell>{product.name}</CTableDataCell>
                       <CTableDataCell>{product.quantity}</CTableDataCell>
                       <CTableDataCell>
-                        {product.value.toLocaleString("tr-TR")} TRY
+                        {product.alisFiyat.toLocaleString("tr-TR")} TRY
+                      </CTableDataCell>
+                      <CTableDataCell>
+                        {product.satisFiyat.toLocaleString("tr-TR")} TRY
                       </CTableDataCell>
                       <CTableDataCell>
                         <CButton

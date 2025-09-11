@@ -63,6 +63,7 @@ const NewExpense = () => {
           MasrafAnaKategoriId: editData.masrafAnaKategoriId?.toString() || "",
           arsiv: null,
           Arsiv: editData.Arsiv || "",
+          kullaniciId: 0, // Kullanıcı ID'si eklendi
         }
       : {
           id: 0,
@@ -78,6 +79,7 @@ const NewExpense = () => {
           MasrafAnaKategoriId: "",
           arsiv: null,
           Arsiv: "",
+          kullaniciId: 0, // Kullanıcı ID'si eklendi
         };
   });
   const [mainCategories, setMainCategories] = useState([]);
@@ -85,6 +87,17 @@ const NewExpense = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [toast, setToast] = useState(null);
   const toaster = useRef();
+
+  // Kullanıcı ID'sini al
+  const getUserId = () => {
+    try {
+      const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+      return user.id;
+    } catch (err) {
+      console.error("Kullanıcı ID'si alınırken hata:", err);
+      return 0;
+    }
+  };
 
   // Net tutarı hesapla
   const calculateNetAmount = () => {
@@ -95,15 +108,16 @@ const NewExpense = () => {
 
   const fetchAccounts = async () => {
     try {
-      const response = await api.get( `${API_BASE_URL}/Hesap/hesap-get-all`, {
+      const { data } = await api.get( `${API_BASE_URL}/Hesap/hesap-get-all`, {
         headers: { accept: "*/*" },
       });
+      console.log("Hesaplar API response (Hesap/hesap-get-all):", data);
 
       // API'den gelen veriyi kontrol et
-      console.log("API'den gelen hesaplar:", response.data);
+      console.log("API'den gelen hesaplar:", data);
 
       // Hesapları formatla
-      const formattedAccounts = response.data.map((account) => ({
+      const formattedAccounts = data.map((account) => ({
         id: account.id,
         userName: account.tanim,
         currency: account.paraBirimi || "TRY",
@@ -130,13 +144,14 @@ const NewExpense = () => {
 
   const fetchMainCategories = async () => {
     try {
-      const response = await api.get(
+      const { data } = await api.get(
         `${API_BASE_URL}/masrafAnaKategori/masrafAnaKategori-get-all`,
         {
           headers: { accept: "*/*" },
         },
       );
-      setMainCategories(response.data);
+      console.log("Ana Kategoriler API response (masrafAnaKategori-get-all):", data);
+      setMainCategories(data);
     } catch (error) {
       console.error(
         "Ana kategoriler çekilirken hata:",
@@ -151,13 +166,14 @@ const NewExpense = () => {
 
   const fetchSubCategories = async () => {
     try {
-      const response = await api.get(
+      const { data } = await api.get(
         `${API_BASE_URL}/masrafAltKategori/masrafAltKategori-get-all`,
         {
           headers: { accept: "*/*" },
         },
       );
-      setSubCategories(response.data);
+      console.log("Alt Kategoriler API response (masrafAltKategori-get-all):", data);
+      setSubCategories(data);
     } catch (error) {
       console.error(
         "Alt kategoriler çekilirken hata:",
@@ -189,12 +205,13 @@ const NewExpense = () => {
       ...(name === "MasrafAnaKategoriId" && value !== prev.MasrafAnaKategoriId
         ? { MasrafAltKategoriId: "" }
         : {}),
+      kullaniciId: getUserId(), // Kullanıcı ID'sini her değişiklikte güncelle
     }));
   };
 
   const handleFileChange = (e) => {
     const file = e.target.files[0];
-    setExpenseData((prev) => ({ ...prev, arsiv: file }));
+    setExpenseData((prev) => ({ ...prev, arsiv: file, kullaniciId: getUserId() }));
     if (file) {
       if (file.type.startsWith("image/")) {
         const url = URL.createObjectURL(file);
@@ -208,7 +225,7 @@ const NewExpense = () => {
   };
 
   const handleRemoveFile = () => {
-    setExpenseData((prev) => ({ ...prev, arsiv: null }));
+    setExpenseData((prev) => ({ ...prev, arsiv: null, kullaniciId: getUserId() }));
     setPreviewUrl(null);
   };
 
@@ -226,6 +243,15 @@ const NewExpense = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const userId = getUserId();
+    if (!userId) {
+      setToast({
+        message: "Geçerli bir kullanıcı oturumu bulunamadı.",
+        color: "danger",
+      });
+      return;
+    }
+    
     setIsLoading(true);
 
     if (!expenseData.HesapId) {
@@ -288,6 +314,7 @@ const NewExpense = () => {
       expenseData.IslemTarihi.format("DD.MM.YYYY"),
     );
     formData.append("Arsiv", expenseData.Arsiv || "");
+    formData.append("kullaniciId", userId.toString()); // Kullanıcı ID'si eklendi
     if (expenseData.arsiv) {
       formData.append("arsiv", expenseData.arsiv);
     } else {
@@ -298,15 +325,27 @@ const NewExpense = () => {
     formData.append("MasrafAnaKategoriId", expenseData.MasrafAnaKategoriId);
     formData.append("KDVOrani", expenseData.KDVOrani);
 
+    console.log("Masraf formData payload:", {
+      id: expenseData.id,
+      hesapId: expenseData.HesapId,
+      tutar: expenseData.Tutar,
+      odemeDurumu: expenseData.OdemeDurumu,
+      kullaniciId: userId,
+      hasFile: !!expenseData.arsiv,
+    });
+
     try {
+      let response;
       if (expenseData.id) {
-        await api.put(`${API_BASE_URL}/masraf/masraf-update`, formData, {
+        response = await api.put(`${API_BASE_URL}/masraf/masraf-update`, formData, {
           headers: { "Content-Type": "multipart/form-data", accept: "*/*" },
         });
+        console.log("Masraf update API response (masraf-update):", response.data);
       } else {
-        await api.post(`${API_BASE_URL}/masraf/masraf-create`, formData, {
+        response = await api.post(`${API_BASE_URL}/masraf/masraf-create`, formData, {
           headers: { "Content-Type": "multipart/form-data", accept: "*/*" },
         });
+        console.log("Masraf create API response (masraf-create):", response.data);
       }
 
       // Hesap bakiyesini güncelle (eğer ödenmiş ise)
@@ -318,23 +357,29 @@ const NewExpense = () => {
         const newBalance =
           selectedAccount.balance - parseFloat(expenseData.Tutar);
 
-        await api.put(
+        const hesapUpdatePayload = {
+          id: selectedAccount.id,
+          tanim: selectedAccount.userName,
+          hesapNo: selectedAccount.accountNumber,
+          guncelBakiye: newBalance,
+          paraBirimi: selectedAccount.currency,
+          etiketRengi: selectedAccount.labelColor,
+          harcamaLimiti: selectedAccount.spendingLimit || 0,
+          guncellenmeTarihi: new Date().toISOString(),
+          hesapKategoriId: selectedAccount.type, // Direkt type değerini kullan
+          kullaniciId: userId, // Kullanıcı ID'si eklendi
+        };
+
+        console.log("Hesap update payload:", hesapUpdatePayload);
+        
+        const hesapResponse = await api.put(
           `${API_BASE_URL}/Hesap/hesap-update`,
-          {
-            id: selectedAccount.id,
-            tanim: selectedAccount.userName,
-            hesapNo: selectedAccount.accountNumber,
-            guncelBakiye: newBalance,
-            paraBirimi: selectedAccount.currency,
-            etiketRengi: selectedAccount.labelColor,
-            harcamaLimiti: selectedAccount.spendingLimit || 0,
-            guncellenmeTarihi: new Date().toISOString(),
-            hesapKategoriId: selectedAccount.type, // Direkt type değerini kullan
-          },
+          hesapUpdatePayload,
           {
             headers: { "Content-Type": "application/json", accept: "*/*" },
           },
         );
+        console.log("Hesap update API response (Hesap/hesap-update):", hesapResponse.data);
       }
 
       setToast({
@@ -349,7 +394,7 @@ const NewExpense = () => {
         status: error.response?.status,
       });
       setToast({
-        message: `Masraf kaydedilirken bir hata oluştu: ${error.response?.data?.title || error.response?.data || error.message}`,
+        message: `Masraf kaydedilirken bir hata oluştu: ${error.response?.data?.message || error.response?.data || error.message}`,
         color: "danger",
       });
     } finally {
@@ -627,6 +672,7 @@ const NewExpense = () => {
                         setExpenseData((prev) => ({
                           ...prev,
                           IslemTarihi: date,
+                          kullaniciId: getUserId(), // Kullanıcı ID'sini güncelle
                         }))
                       }
                       slotProps={{
@@ -650,6 +696,7 @@ const NewExpense = () => {
                         setExpenseData((prev) => ({
                           ...prev,
                           OdemeTarihi: date,
+                          kullaniciId: getUserId(), // Kullanıcı ID'sini güncelle
                         }))
                       }
                       slotProps={{

@@ -50,19 +50,32 @@ const ExpensesItem = () => {
   const [formData, setFormData] = useState({
     adi: "",
     masrafAnaKategoriId: "",
+    kullaniciId: 0,
   });
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
   const [toast, setToast] = useState(null);
   const toaster = useRef();
 
+  // Kullanıcı ID'sini al
+  const getUserId = () => {
+    try {
+      const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+      return user.id;
+    } catch (err) {
+      console.error("Kullanıcı ID'si alınırken hata:", err);
+      return 0;
+    }
+  };
+
   const fetchCategories = async () => {
     setIsLoading(true);
     try {
-      const response = await api.get(
+      const { data } = await api.get(
         `${API_BASE_URL}/masrafAnaKategori/masrafAnaKategori-get-all`,
       );
-      setCategories(response.data);
+      console.log("Ana Kategoriler API response (masrafAnaKategori-get-all):", data);
+      setCategories(data);
     } catch (error) {
       console.error(
         "Ana kategoriler çekilirken hata:",
@@ -80,10 +93,11 @@ const ExpensesItem = () => {
   const fetchSubCategories = async () => {
     setIsLoading(true);
     try {
-      const response = await api.get(
+      const { data } = await api.get(
         `${API_BASE_URL}/masrafAltKategori/masrafAltKategori-get-all`,
       );
-      setSubCategories(response.data);
+      console.log("Alt Kategoriler API response (masrafAltKategori-get-all):", data);
+      setSubCategories(data);
     } catch (error) {
       console.error(
         "Alt kategoriler çekilirken hata:",
@@ -120,7 +134,11 @@ const ExpensesItem = () => {
     setSelectedCategory(category);
     setSelectedSubCategory(null);
     setModalType("category");
-    setFormData({ adi: category.adi, masrafAnaKategoriId: "" });
+    setFormData({ 
+      adi: category.adi, 
+      masrafAnaKategoriId: "", 
+      kullaniciId: getUserId() 
+    });
     setShowModal(true);
   };
 
@@ -130,6 +148,7 @@ const ExpensesItem = () => {
     setFormData({
       adi: subCategory.adi,
       masrafAnaKategoriId: subCategory.masrafAnaKategoriId?.toString() || "",
+      kullaniciId: getUserId(),
     });
     setShowModal(true);
   };
@@ -141,6 +160,15 @@ const ExpensesItem = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    const userId = getUserId();
+    if (!userId) {
+      setToast({
+        message: "Geçerli bir kullanıcı oturumu bulunamadı.",
+        color: "danger",
+      });
+      return;
+    }
+    
     setIsLoading(true);
 
     const currentId =
@@ -161,23 +189,28 @@ const ExpensesItem = () => {
           adi: formData.adi,
           eklenmeTarihi: new Date().toISOString(),
           guncellenmeTarihi: new Date().toISOString(),
+          kullaniciId: userId,
         };
+        console.log("Ana Kategori payload:", payload);
+        
         if (selectedCategory?.id) {
-          await api.put(
+          const response = await api.put(
             `${API_BASE_URL}/masrafAnaKategori/masrafAnaKategori-update`,
             payload,
             {
               headers: { "Content-Type": "application/json", accept: "*/*" },
             },
           );
+          console.log("Ana Kategori update API response:", response.data);
         } else {
-          await api.post(
+          const response = await api.post(
             `${API_BASE_URL}/masrafAnaKategori/masrafAnaKategori-create`,
             payload,
             {
               headers: { "Content-Type": "application/json", accept: "*/*" },
             },
           );
+          console.log("Ana Kategori create API response:", response.data);
         }
         await fetchCategories();
         setToast({
@@ -191,23 +224,28 @@ const ExpensesItem = () => {
           masrafAnaKategoriId: parseInt(formData.masrafAnaKategoriId),
           eklenmeTarihi: new Date().toISOString(),
           guncellenmeTarihi: new Date().toISOString(),
+          kullaniciId: userId,
         };
+        console.log("Alt Kategori payload:", payload);
+        
         if (selectedSubCategory?.id) {
-          await api.put(
+          const response = await api.put(
             `${API_BASE_URL}/masrafAltKategori/masrafAltKategori-update`,
             payload,
             {
               headers: { "Content-Type": "application/json", accept: "*/*" },
             },
           );
+          console.log("Alt Kategori update API response:", response.data);
         } else {
-          await api.post(
+          const response = await api.post(
             `${API_BASE_URL}/masrafAltKategori/masrafAltKategori-create`,
             payload,
             {
               headers: { "Content-Type": "application/json", accept: "*/*" },
             },
           );
+          console.log("Alt Kategori create API response:", response.data);
         }
         await fetchSubCategories();
         setToast({
@@ -216,14 +254,14 @@ const ExpensesItem = () => {
         });
       }
       setShowModal(false);
-      setFormData({ adi: "", masrafAnaKategoriId: "" });
+      setFormData({ adi: "", masrafAnaKategoriId: "", kullaniciId: userId });
     } catch (error) {
       console.error(
         `${modalType} kaydedilirken hata:`,
         error.response?.data || error.message,
       );
       setToast({
-        message: `${modalType === "category" ? "Ana kategori" : "Alt kategori"} kaydedilirken hata: ${error.response?.data?.title || error.message}`,
+        message: `${modalType === "category" ? "Ana kategori" : "Alt kategori"} kaydedilirken hata: ${error.response?.data?.message || error.message}`,
         color: "danger",
       });
     } finally {
@@ -232,27 +270,40 @@ const ExpensesItem = () => {
   };
 
   const handleDelete = async () => {
+    const userId = getUserId();
+    if (!userId) {
+      setToast({
+        message: "Geçerli bir kullanıcı oturumu bulunamadı.",
+        color: "danger",
+      });
+      return;
+    }
+    
     setIsLoading(true);
     try {
       if (modalType === "category" && selectedCategory?.id) {
-        await api.delete(
-          `${API_BASE_URL}/masrafAnaKategori/masrafAnaKategori-delete/${selectedCategory.id}`,
+        console.log("Ana Kategori silme isteği: ID =", selectedCategory.id, "Kullanıcı ID =", userId);
+        const response = await api.delete(
+          `${API_BASE_URL}/masrafAnaKategori/masrafAnaKategori-delete/${selectedCategory.id}?kullaniciId=${userId}`,
           {
             headers: { accept: "*/*" },
           },
         );
+        console.log("Ana Kategori delete API response:", response.data);
         await fetchCategories();
         setToast({
           message: `${selectedCategory.adi} ana kategorisi silindi.`,
           color: "success",
         });
       } else if (modalType === "subCategory" && selectedSubCategory?.id) {
-        await api.delete(
-          `${API_BASE_URL}/masrafAltKategori/masrafAltKategori-delete/${selectedSubCategory.id}`,
+        console.log("Alt Kategori silme isteği: ID =", selectedSubCategory.id, "Kullanıcı ID =", userId);
+        const response = await api.delete(
+          `${API_BASE_URL}/masrafAltKategori/masrafAltKategori-delete/${selectedSubCategory.id}?kullaniciId=${userId}`,
           {
             headers: { accept: "*/*" },
           },
         );
+        console.log("Alt Kategori delete API response:", response.data);
         await fetchSubCategories();
         setToast({
           message: `${selectedSubCategory.adi} alt kategorisi silindi.`,
@@ -266,7 +317,7 @@ const ExpensesItem = () => {
         error.response?.data || error.message,
       );
       setToast({
-        message: `${modalType === "category" ? "Ana kategori" : "Alt kategori"} silinirken hata: ${error.response?.data?.title || error.message}`,
+        message: `${modalType === "category" ? "Ana kategori" : "Alt kategori"} silinirken hata: ${error.response?.data?.message || error.message}`,
         color: "danger",
       });
     } finally {
@@ -350,7 +401,11 @@ const ExpensesItem = () => {
           onClick={() => {
             setModalType("category");
             setSelectedCategory(null);
-            setFormData({ adi: "", masrafAnaKategoriId: "" });
+            setFormData({ 
+              adi: "", 
+              masrafAnaKategoriId: "", 
+              kullaniciId: getUserId() 
+            });
             setShowModal(true);
           }}
         >
@@ -364,6 +419,7 @@ const ExpensesItem = () => {
             setFormData({
               adi: "",
               masrafAnaKategoriId: categories[0]?.id?.toString() || "",
+              kullaniciId: getUserId(),
             });
             setShowModal(true);
           }}

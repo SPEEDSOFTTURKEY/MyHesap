@@ -97,6 +97,10 @@ const ProductModal = ({
   const handleSubmit = async () => {
     try {
       setLoading(true);
+      
+      // Kullanıcı ID'sini al
+      const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+      
       const productFormData = new FormData();
       productFormData.append("Id", formData.id || 0);
       productFormData.append("Adi", formData.name || "");
@@ -152,6 +156,9 @@ const ProductModal = ({
       productFormData.append("KritikStok", criticalStock);
       productFormData.append("Etiketler", formData.tags || "");
       productFormData.append("Durumu", 1);
+      
+      // Kullanıcı ID'sini ekle
+      productFormData.append("KullaniciId", user.id);
 
       // Fotoğraf ekleme (async for-of kullanıldı)
       if (formData.images.length > 0) {

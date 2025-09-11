@@ -68,17 +68,20 @@ const WarehouseStockCount = () => {
       if (!depoId || isNaN(depoId)) {
         throw new Error("Geçersiz depo ID'si.");
       }
-      const { data } = await api.get(
+      const response = await api.get(
         `${API_BASE_URL}/depo/get-by-id/${depoId}`,
       );
-      console.log("Raw warehouse data from API:", data);
-      if (data.durumu !== 1) {
+      console.log("API Response from /depo/get-by-id:", response);
+      console.log("Raw warehouse data from API:", response.data);
+      
+      if (response.data.durumu !== 1) {
         throw new Error("Depo bulunamadı veya aktif değil.");
       }
-      setWarehouse({ id: data.id, adi: data.adi });
-      fetchProducts(data.id);
+      setWarehouse({ id: response.data.id, adi: response.data.adi });
+      fetchProducts(response.data.id);
     } catch (err) {
       console.error("Depo yükleme hatası:", err.response?.data || err.message);
+      console.error("Error details:", err);
       addToast(err.response?.data?.message || "Depo yüklenemedi.", "error");
       navigate("/app/warehouses");
     } finally {
@@ -90,18 +93,19 @@ const WarehouseStockCount = () => {
     try {
       setLoading(true);
       console.log("Fetching products for depoId:", depoId);
-      const { data: stockData } = await api.get(
+      const response = await api.get(
         `${API_BASE_URL}/depo/depolardaki-urunstoklar/${depoId}`,
       );
-      console.log("Raw stock data from API:", stockData);
+      console.log("API Response from /depo/depolardaki-urunstoklar:", response);
+      console.log("Raw stock data from API:", response.data);
 
-      if (!Array.isArray(stockData)) {
+      if (!Array.isArray(response.data)) {
         throw new Error("Stok verisi dizi formatında değil.");
       }
 
       // Include all products for debugging (remove filter for durumu)
-      // const activeStocks = stockData.filter((item) => item.durumu === 1);
-      const activeStocks = stockData;
+      // const activeStocks = response.data.filter((item) => item.durumu === 1);
+      const activeStocks = response.data;
 
       const validProducts = activeStocks
         .filter((stock) => stock.urun) // Ensure Urun object exists
@@ -133,6 +137,7 @@ const WarehouseStockCount = () => {
       console.log("Fetched products:", validProducts);
     } catch (err) {
       console.error("Ürün yükleme hatası:", err.response?.data || err.message);
+      console.error("Error details:", err);
       const errorMessage =
         err.response?.status === 404
           ? "Stok verileri için endpoint bulunamadı."
@@ -174,6 +179,7 @@ const WarehouseStockCount = () => {
       }));
 
       console.log("Saving stock data:", payloads);
+      
       const responses = await Promise.all(
         payloads.map((payload) =>
           api.post(
@@ -182,9 +188,13 @@ const WarehouseStockCount = () => {
           ),
         ),
       );
-      responses.forEach((response) => {
-        console.log("Save response from API:", response.data);
+      
+      console.log("All save responses from API:", responses);
+      responses.forEach((response, index) => {
+        console.log(`Save response ${index + 1} from API:`, response);
+        console.log(`Response data ${index + 1}:`, response.data);
       });
+      
       addToast("Stoklar güncellendi.", "success");
       navigate(`/app/warehouses/${depoId}`, { state: { warehouse } });
     } catch (err) {
@@ -192,6 +202,7 @@ const WarehouseStockCount = () => {
         "Stok güncelleme hatası:",
         err.response?.data || err.message,
       );
+      console.error("Error details:", err);
       addToast(
         err.response?.data?.message || "Stoklar güncellenemedi.",
         "error",
@@ -328,7 +339,7 @@ const WarehouseStockCount = () => {
                     <CTableHeaderCell>Barkod</CTableHeaderCell>
                     <CTableHeaderCell>Sistemdeki Miktar</CTableHeaderCell>
                     <CTableHeaderCell>Sayılan Miktar</CTableHeaderCell>
-                    <CTableHeaderCell>Birim Maliyet</CTableHeaderCell>
+                    {/* <CTableHeaderCell>Birim Maliyet</CTableHeaderCell> */}
                   </CTableRow>
                 </CTableHead>
                 <CTableBody>
@@ -350,7 +361,7 @@ const WarehouseStockCount = () => {
                           disabled={loading}
                         />
                       </CTableDataCell>
-                      <CTableDataCell>
+                      {/* <CTableDataCell>
                         <CFormInput
                           type="number"
                           step="0.01"
@@ -367,7 +378,7 @@ const WarehouseStockCount = () => {
                           style={{ width: "100px" }}
                           disabled={loading}
                         />
-                      </CTableDataCell>
+                      </CTableDataCell> */}
                     </CTableRow>
                   ))}
                 </CTableBody>

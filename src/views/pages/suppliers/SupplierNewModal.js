@@ -57,6 +57,7 @@ const SupplierNewModal = ({ visible, onClose, onSupplierCreated }) => {
     durumu: 1,
     aktif: 0,
     fotograf: null,
+    kullaniciId: 0,
   });
   const [toasts, setToasts] = useState([]);
   const [activeTab, setActiveTab] = useState("identity");
@@ -103,6 +104,13 @@ const SupplierNewModal = ({ visible, onClose, onSupplierCreated }) => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      // Kullanıcı ID'sini al
+      const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+      if (!user.id) {
+        addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "error");
+        return;
+      }
+
       const supplierData = {
         unvan: formData.unvan?.trim() || "",
         fotograf: formData.fotograf,
@@ -124,7 +132,10 @@ const SupplierNewModal = ({ visible, onClose, onSupplierCreated }) => {
         aciklama: formData.aciklama || "",
         durumu: 1,
         aktif: 0,
+        kullaniciId: user.id, // Kullanıcı ID'si eklendi
       };
+
+      console.log("Supplier data payload:", supplierData);
 
       const formDataToSend = new FormData();
       Object.entries(supplierData).forEach(([k, v]) => {
@@ -135,10 +146,16 @@ const SupplierNewModal = ({ visible, onClose, onSupplierCreated }) => {
         }
       });
 
+      console.log("FormData contents:");
+      for (let [key, value] of formDataToSend.entries()) {
+        console.log(key, value);
+      }
+
       const res = await api.post("/tedarikci/tedarikci-create", formDataToSend);
 
       // API cevabını konsola yazdır
-      console.log("API Cevabı:", JSON.stringify(res.data, null, 2));
+      console.log("API Response (tedarikci/tedarikci-create):", res.data);
+      console.log("API OK", res.status);
 
       addToast("Tedarikçi başarıyla eklendi.", "success");
       onSupplierCreated(res.data); // Yeni tedarikçiyi üst bileşene gönder

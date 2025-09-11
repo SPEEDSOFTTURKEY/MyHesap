@@ -45,6 +45,7 @@ const SupplierNew = () => {
     durumu: 1,
     aktif: 0,
     fotograf: null, // Changed to match backend IFormFile parameter
+    kullaniciId: 0,
   });
   const [toasts, setToasts] = useState([]);
   const [activeTab, setActiveTab] = useState("identity");
@@ -94,13 +95,20 @@ const SupplierNew = () => {
     console.log("Submit öncesi formData:", JSON.stringify(formData, null, 2));
 
     try {
+      // Kullanıcı ID'sini al
+      const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+      if (!user.id) {
+        addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "error");
+        return;
+      }
+
       // Validate required fields
       const unvan = (formData.unvan ?? "").trim();
       const email = (formData.email ?? "").trim();
       if (!unvan) {
         throw new Error("Tedarikçi unvanı zorunlu.");
       }
-      if (!email && !formData.Telefon.trim()) {
+      if (!email && !formData.telefon.trim()) {
         throw new Error("E-posta veya telefon numarası zorunlu.");
       }
 
@@ -126,7 +134,10 @@ const SupplierNew = () => {
         aciklama: formData.aciklama || "",
         durumu: 1,
         aktif: 0,
+        kullaniciId: user.id,
       };
+
+      console.log("Supplier data payload:", supplierData);
 
       const formDataToSend = new FormData();
       Object.entries(supplierData).forEach(([k, v]) => {
@@ -150,6 +161,7 @@ const SupplierNew = () => {
         },
       );
 
+      console.log("API Response (tedarikci/tedarikci-create):", res.data);
       console.log("API OK", res.status);
       addToast("Tedarikçi başarıyla eklendi.", "success");
       navigate("/app/suppliers");

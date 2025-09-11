@@ -33,9 +33,12 @@ import {
   CFormSelect,
 } from "@coreui/react";
 import CIcon from "@coreui/icons-react";
-import { cilPen, cilPlus, cilTrash } from "@coreui/icons";
+import { cilPen, cilPlus, cilTrash, cilBan } from "@coreui/icons";
 import CustomerModal from "../../../components/customers/CustomerModal";
 import api from "../../../api/api";
+
+const API_BASE_URL = "https://localhost:44375/api";
+const KULLANICI_ID = 1; // Bu değeri session, context veya props'tan almalısınız
 
 const CustomerDetail = () => {
   const { id } = useParams();
@@ -60,8 +63,6 @@ const CustomerDetail = () => {
     kodu: "",
     aktif: true,
   });
-  const API_BASE_URL = "https://localhost:44375/api";
-
   const [saleFormData, setSaleFormData] = useState({
     barkod: "",
     urunAdi: "",
@@ -80,37 +81,33 @@ const CustomerDetail = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showSaleUpdateModal, setShowSaleUpdateModal] = useState(false);
   const [selectedSale, setSelectedSale] = useState(null);
+  const [products, setProducts] = useState([]);
+  const [selectedSales, setSelectedSales] = useState([]); // Toplu iptal için seçili satışlar
 
-  useEffect(() => {
-    console.log("Müşteri image:", customer?.image);
-  }, [customer]);
-
-  const addToast = (message, type = "success") => {
+  // Toast bildirimi ekleme
+  const addToast = useCallback((message, type = "success") => {
     const toast = (
       <CToast key={Date.now()} autohide={true} visible={true} delay={5000}>
         <CToastHeader closeButton>
           <strong className="me-auto">
-            {type === "error"
-              ? "Hata"
-              : type === "warning"
-                ? "Uyarı"
-                : "Başarılı"}
+            {type === "error" ? "Hata" : type === "warning" ? "Uyarı" : "Başarılı"}
           </strong>
         </CToastHeader>
         <CToastBody>{message}</CToastBody>
       </CToast>
     );
     setToasts((prev) => [...prev, toast]);
-  };
+  }, []);
 
+  // Genel veri çekme fonksiyonu
   const fetchData = async (url, setData) => {
     try {
       const { data } = await api.get(url);
       const result = Array.isArray(data)
         ? data.filter((item) => item.durumu === 1)
         : data?.durumu === 1
-          ? [data]
-          : [];
+        ? [data]
+        : [];
       setData(result);
       return result;
     } catch (err) {
@@ -125,19 +122,20 @@ const CustomerDetail = () => {
     }
   };
 
+  // Müşteri verilerini API'den dönüştürme
   const mapApiCustomer = async (apiCustomer) => {
     let classificationName = "Bilinmiyor";
     try {
       if (apiCustomer.musteriSiniflandirmaId) {
         const classification = classifications.find(
-          (c) => c.id === apiCustomer.musteriSiniflandirmaId,
+          (c) => c.id === apiCustomer.musteriSiniflandirmaId
         );
         if (classification) {
           classificationName = classification.adi;
         } else {
           const fetchedData = await fetchData(
             `${API_BASE_URL}/musteriSiniflandirma/get-by-id/${apiCustomer.musteriSiniflandirmaId}`,
-            setClassifications,
+            setClassifications
           );
           classificationName =
             fetchedData && fetchedData.length > 0
@@ -177,18 +175,17 @@ const CustomerDetail = () => {
     };
   };
 
+  // Müşteri bilgilerini getir
   const fetchCustomer = useCallback(async () => {
     setLoading(true);
     try {
       await fetchData(
         `${API_BASE_URL}/musteriSiniflandirma/get-all`,
-        setClassifications,
+        setClassifications
       );
       const { data } = await api.get(
-        `${API_BASE_URL}/musteri/musteri-get-by-id/${id}`,
+        `${API_BASE_URL}/musteri/musteri-get-by-id/${id}`
       );
-      console.log("Müşteri API Yanıtı:", data);
-
       const customerData = Array.isArray(data) ? data[0] : data;
 
       if (!customerData || customerData.durumu !== 1) {
@@ -209,13 +206,14 @@ const CustomerDetail = () => {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, addToast]);
 
+  // Şube bilgilerini getir
   const fetchBranches = async () => {
     try {
       const data = await fetchData(
         `${API_BASE_URL}/sube/sube-get-by-musteriId/${id}`,
-        setBranches,
+        setBranches
       );
       if (data) {
         setBranches(data);
@@ -225,11 +223,12 @@ const CustomerDetail = () => {
     }
   };
 
+  // Satış bilgilerini getir
   const fetchSales = async () => {
     try {
       const data = await fetchData(
         `${API_BASE_URL}/musteriSatis/musteriSatis-get-by-musteri/${id}`,
-        setSales,
+        setSales
       );
       if (data) {
         setSales(data);
@@ -239,8 +238,19 @@ const CustomerDetail = () => {
     }
   };
 
+  // Ürünleri getir
+  const fetchProducts = async () => {
+    try {
+      const { data } = await api.get(`${API_BASE_URL}/urun/urun-get-all`);
+      setProducts(data);
+    } catch (err) {
+      console.error("Ürünleri Getirme Hatası:", err);
+      addToast("Ürünler yüklenemedi.", "error");
+    }
+  };
+
   // Debounce yardımcı fonksiyonu
-  function debounce(func, wait) {
+  const debounce = (func, wait) => {
     let timeout;
     return function executedFunction(...args) {
       const later = () => {
@@ -250,34 +260,29 @@ const CustomerDetail = () => {
       clearTimeout(timeout);
       timeout = setTimeout(later, wait);
     };
-  }
+  };
 
-  // Barkod ile ürün getirme fonksiyonu
+  // Barkod ile ürün getirme
   const fetchProductByBarcode = async (barcode) => {
     if (!barcode || barcode.length < 3) return;
-
     try {
       const { data } = await api.get(
-        `${API_BASE_URL}/urun/urun-get-barcode?barkod=${barcode}`,
+        `${API_BASE_URL}/urun/urun-get-barcode?barkod=${barcode}`
       );
-
       if (data && data.length > 0) {
         const product = data[0];
-
         setSaleFormData((prev) => ({
           ...prev,
           barkod: barcode,
           urunAdi: product.adi || "",
           fiyat: product.satisFiyat ? product.satisFiyat.toString() : "",
           birim: product.birimAdi || "adet",
-          miktar: prev.miktar,
+          miktar: prev.miktar || "1",
           toplamFiyat: prev.miktar
             ? (parseFloat(prev.miktar) * product.satisFiyat).toFixed(2)
-            : "",
+            : product.satisFiyat.toString(),
           musteriId: id,
         }));
-
-        // Stok durumunu kontrol et
         if (product.stokMiktari !== undefined && product.stokMiktari <= 0) {
           addToast("Uyarı: Bu ürün stokta yok!", "warning");
         } else if (
@@ -286,23 +291,26 @@ const CustomerDetail = () => {
         ) {
           addToast(
             `Uyarı: Stok kritik seviyede (${product.stokMiktari} adet)`,
-            "warning",
+            "warning"
           );
         }
+      } else {
+        addToast("Ürün bulunamadı.", "error");
       }
     } catch (err) {
       console.error("Barkod ile ürün getirme hatası:", err);
+      addToast("Ürün yüklenemedi.", "error");
     }
   };
 
-  // Debounced barkod değişiklik handler'ı
   const handleBarcodeChange = useCallback(
     debounce((value) => {
       fetchProductByBarcode(value);
     }, 800),
-    [],
+    []
   );
 
+  // Şube ekleme
   const handleAddBranch = async () => {
     if (!formData.adi) {
       addToast("Şube adı zorunludur.", "error");
@@ -316,36 +324,29 @@ const CustomerDetail = () => {
     try {
       const payload = {
         adi: formData.adi,
-        adres: formData.adres || "a",
-        kodu: formData.kodu || "b",
+        adres: formData.adres || "",
+        kodu: formData.kodu || "",
         aktif: formData.aktif ? 1 : 0,
         musteriId: parseInt(id),
+        KullaniciId: KULLANICI_ID,
       };
-      console.log("Şube Ekleme Payload:", payload);
       const { data } = await api.post(
         `${API_BASE_URL}/sube/sube-create`,
-        payload,
-        {
-          headers: { "Content-Type": "application/json" },
-        },
+        payload
       );
-      console.log("Şube Ekleme Yanıtı:", data);
       addToast(data.message || "Şube başarıyla eklendi.", "success");
       await fetchBranches();
       setShowBranchModal(false);
       setFormData({ adi: "", adres: "", kodu: "", aktif: true });
     } catch (err) {
-      console.error("Şube Ekleme Hatası:", {
-        message: err.message,
-        status: err.response?.status,
-        data: err.response?.data,
-      });
+      console.error("Şube Ekleme Hatası:", err);
       addToast(err.response?.data?.message || "Şube eklenemedi.", "error");
     } finally {
       setLoading(false);
     }
   };
 
+  // Şube güncelleme
   const handleEditBranch = (branch) => {
     setSelectedBranch(branch);
     setFormData({
@@ -371,10 +372,9 @@ const CustomerDetail = () => {
         kodu: formData.kodu || "",
         aktif: formData.aktif ? 1 : 0,
         musteriId: parseInt(id),
+        KullaniciId: KULLANICI_ID,
       };
-      await api.put(`${API_BASE_URL}/sube/sube-update`, payload, {
-        headers: { "Content-Type": "application/json" },
-      });
+      await api.put(`${API_BASE_URL}/sube/sube-update`, payload);
       addToast("Şube güncellendi.", "success");
       setShowBranchUpdateModal(false);
       await fetchBranches();
@@ -385,107 +385,24 @@ const CustomerDetail = () => {
     }
   };
 
+  // Şube silme
   const handleDeleteBranch = async (branchId) => {
     setLoading(true);
     try {
       await api.delete(
-        `${API_BASE_URL}/sube/sube-delete/${branchId}`,
+        `${API_BASE_URL}/sube/sube-delete/${branchId}?kullaniciId=${KULLANICI_ID}`
       );
       addToast("Şube başarıyla silindi.", "success");
       await fetchBranches();
     } catch (err) {
-      console.error("Şube Silme Hatası:", {
-        message: err.message,
-        status: err.response?.status,
-        data: err.response?.data,
-      });
+      console.error("Şube Silme Hatası:", err);
       addToast(err.response?.data?.message || "Şube silinemedi.", "error");
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchTablesData = async () => {
-    try {
-      await fetchSales();
-      setOffers([]);
-      setPurchases([]);
-      setPayments([]);
-      await fetchBranches();
-      addToast("Tablo verileri yüklenemedi, API sağlanmadı.", "error");
-    } catch (err) {
-      addToast("Veriler yüklenemedi.", "error");
-    }
-  };
-
-  useEffect(() => {
-    if (id && (!customer || !customer.id)) {
-      fetchCustomer();
-    } else {
-      fetchCustomer();
-    }
-    fetchSales();
-    fetchBranches();
-  }, [id, fetchCustomer]);
-
-  const handleItemClick = (item, type) => {
-    setSelectedItem(item);
-    setModalType(type);
-    setShowModal(true);
-  };
-
-  const handleAction = (action) => {
-    if (action === "Satış Yap") {
-      setShowSaleModal(true);
-    } else {
-      addToast(`${action} işlemi başlatıldı.`, "success");
-    }
-  };
-
-  const handleDelete = async () => {
-    setShowDeleteModal(false);
-    setLoading(true);
-    try {
-      await api.delete(
-        `${API_BASE_URL}/musteri/musteri-delete/${customer.id}`,
-      );
-      addToast("Müşteri silindi.", "success");
-      navigate("/app/customers");
-    } catch (err) {
-      console.error("Müşteri Silme Hatası:", {
-        message: err.message,
-        status: err.response?.status,
-        data: err.response?.data,
-      });
-      addToast(err.response?.data?.message || "Müşteri silinemedi.", "error");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleActivate = async () => {
-    setLoading(true);
-    try {
-      await api.put(
-        `${API_BASE_URL}/musteri/musteri-aktif/${customer.id}`,
-      );
-      addToast("Müşteri aktif edildi.", "success");
-      fetchCustomer();
-    } catch (err) {
-      console.error("Müşteri Aktif Etme Hatası:", {
-        message: err.message,
-        status: err.response?.status,
-        data: err.response?.data,
-      });
-      addToast(
-        err.response?.data?.message || "Müşteri aktif edilemedi.",
-        "error",
-      );
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Satış ekleme
   const handleAddSaleItem = () => {
     if (
       !saleFormData.barkod ||
@@ -530,23 +447,25 @@ const CustomerDetail = () => {
     });
     addToast("Ürün sepete eklendi.", "success");
 
-    // Barkod input'una tekrar focus ver
     setTimeout(() => {
       document.querySelector('input[name="barkod"]')?.focus();
     }, 100);
   };
 
+  // Satış kalemini silme
   const handleDeleteSaleItem = (itemId) => {
     setSaleItems((prev) => prev.filter((item) => item.id !== itemId));
     addToast("Ürün silindi.", "success");
   };
 
+  // Toplam fiyat hesaplama
   const calculateTotalPrice = () => {
     return saleItems
       .reduce((sum, item) => sum + item.toplamFiyat, 0)
       .toLocaleString("tr-TR");
   };
 
+  // Satış kaydetme
   const handleSaveSales = async () => {
     if (saleItems.length === 0) {
       addToast("En az bir ürün ekleyin.", "error");
@@ -562,10 +481,11 @@ const CustomerDetail = () => {
         miktar: item.miktar,
         toplamFiyat: item.toplamFiyat,
         musteriId: parseInt(id),
+        kullaniciId: KULLANICI_ID,
       }));
       await api.post(
         `${API_BASE_URL}/musteriSatis/musteriSatis-create`,
-        payload,
+        payload
       );
       addToast("Satış(lar) kaydedildi.", "success");
       setShowSaleModal(false);
@@ -578,18 +498,42 @@ const CustomerDetail = () => {
     }
   };
 
+  // Satış güncelleme
   const handleEditSale = (sale) => {
     setSelectedSale(sale);
     setSaleFormData({
+      id: sale.id,
       barkod: sale.barkod,
       urunAdi: sale.urunAdi,
-      fiyat: sale.fiyat,
+      fiyat: sale.fiyat.toString(),
       birim: sale.birim,
-      miktar: sale.miktar,
-      toplamFiyat: sale.toplamFiyat,
+      miktar: sale.miktar.toString(),
+      toplamFiyat: sale.toplamFiyat.toString(),
       musteriId: id,
     });
     setShowSaleUpdateModal(true);
+  };
+
+  const handleSaleFormChange = (e) => {
+    const { name, value } = e.target;
+    setSaleFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+
+    if (name === "fiyat" || name === "miktar") {
+      const fiyat = parseFloat(saleFormData.fiyat) || 0;
+      const miktar = name === "miktar" ? parseFloat(value) || 0 : parseFloat(saleFormData.miktar) || 0;
+      const toplamFiyat = (fiyat * miktar).toFixed(2);
+      setSaleFormData((prev) => ({
+        ...prev,
+        [name]: value,
+        toplamFiyat: toplamFiyat,
+      }));
+    }
+    if (name === "barkod") {
+      handleBarcodeChange(value);
+    }
   };
 
   const handleUpdateSale = async () => {
@@ -605,19 +549,19 @@ const CustomerDetail = () => {
     setLoading(true);
     try {
       const payload = {
-        id: selectedSale.id,
+        id: parseInt(saleFormData.id),
         barkod: saleFormData.barkod,
         urunAdi: saleFormData.urunAdi,
         fiyat: parseFloat(saleFormData.fiyat),
         birim: saleFormData.birim,
         miktar: parseFloat(saleFormData.miktar),
-        toplamFiyat:
-          parseFloat(saleFormData.fiyat) * parseFloat(saleFormData.miktar),
+        toplamFiyat: parseFloat(saleFormData.toplamFiyat),
         musteriId: parseInt(id),
+        kullaniciId: KULLANICI_ID,
       };
       await api.put(
         `${API_BASE_URL}/musteriSatis/musteriSatis-update`,
-        payload,
+        payload
       );
       addToast("Satış güncellendi.", "success");
       setShowSaleUpdateModal(false);
@@ -629,11 +573,60 @@ const CustomerDetail = () => {
     }
   };
 
+  // Satış iptal (tek veya toplu)
+  const handleCancelSales = useCallback(async (satisIds) => {
+    if (!window.confirm(`${Array.isArray(satisIds) ? "Seçili satışları" : "Bu satışı"} iptal etmek istediğinizden emin misiniz?`)) {
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const ids = Array.isArray(satisIds) ? satisIds : [satisIds];
+      await Promise.all(
+        ids.map(async (satisId) => {
+          await api.post(`${API_BASE_URL}/musteriSatis/musteriSatis-iptal`, null, {
+            params: { satisId, kullaniciId: KULLANICI_ID }
+          });
+        })
+      );
+      addToast(`${ids.length} satış iptal edildi.`);
+      setSelectedSales([]);
+      fetchSales();
+    } catch (err) {
+      console.error("Satış İptal Hatası:", err);
+      addToast(err.response?.data?.Message || "Satış iptal edilemedi.", "error");
+    } finally {
+      setLoading(false);
+    }
+  }, [addToast, fetchSales]);
+
+  // Satış seçimi (toplu iptal için)
+  const handleSelectSale = (saleId) => {
+    setSelectedSales((prev) =>
+      prev.includes(saleId)
+        ? prev.filter((id) => id !== saleId)
+        : [...prev, saleId]
+    );
+  };
+
+  // Toplu iptal butonu
+  const handleBulkCancel = () => {
+    if (selectedSales.length === 0) {
+      addToast("Lütfen en az bir satış seçin.", "error");
+      return;
+    }
+    handleCancelSales(selectedSales);
+  };
+
+  // Satış silme
   const handleDeleteSale = async (saleId) => {
+    if (!window.confirm("Bu satış kaydını silmek istediğinizden emin misiniz?")) {
+      return;
+    }
     setLoading(true);
     try {
       await api.delete(
-        `${API_BASE_URL}/musteriSatis/musteriSatis-delete/${saleId}`,
+        `${API_BASE_URL}/musteriSatis/musteriSatis-delete/${saleId}?kullaniciId=${KULLANICI_ID}`
       );
       addToast("Satış silindi.", "success");
       fetchSales();
@@ -643,6 +636,54 @@ const CustomerDetail = () => {
       setLoading(false);
     }
   };
+
+  // Müşteri silme
+  const handleDelete = async () => {
+    setShowDeleteModal(false);
+    setLoading(true);
+    try {
+      await api.delete(
+        `${API_BASE_URL}/musteri/musteri-delete/${customer.id}?kullaniciId=${KULLANICI_ID}`
+      );
+      addToast("Müşteri silindi.", "success");
+      navigate("/app/customers");
+    } catch (err) {
+      console.error("Müşteri Silme Hatası:", err);
+      addToast(err.response?.data?.message || "Müşteri silinemedi.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Müşteri aktif etme
+  const handleActivate = async () => {
+    setLoading(true);
+    try {
+      await api.put(`${API_BASE_URL}/musteri/musteri-aktif/${customer.id}`);
+      addToast("Müşteri aktif edildi.", "success");
+      fetchCustomer();
+    } catch (err) {
+      console.error("Müşteri Aktif Etme Hatası:", err);
+      addToast(
+        err.response?.data?.message || "Müşteri aktif edilemedi.",
+        "error"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Component mount olduğunda verileri getir
+  useEffect(() => {
+    if (id && (!customer || !customer.id)) {
+      fetchCustomer();
+    } else {
+      fetchCustomer();
+    }
+    fetchSales();
+    fetchBranches();
+    fetchProducts();
+  }, [id, fetchCustomer]);
 
   if (loading || !customer) {
     return (
@@ -679,7 +720,7 @@ const CustomerDetail = () => {
                     src={
                       customer.image
                         ? `https://speedsofttest.com/${customer.image}`
-                        : `https://speedsofttest.com/${customer.image}`
+                        : "https://via.placeholder.com/100"
                     }
                     alt="Müşteri resmi"
                     style={{
@@ -708,10 +749,6 @@ const CustomerDetail = () => {
                     {customer.taxOrIdNumber}
                   </p>
                 </CCol>
-                <CCol
-                  xs={2}
-                  className="d-flex justify-content-end align-items-center gap-2"
-                ></CCol>
               </CRow>
             </CCardHeader>
             <CCardBody>
@@ -785,10 +822,17 @@ const CustomerDetail = () => {
             <CButton
               color="success"
               style={{ color: "white" }}
-              onClick={() => handleAction("Satış Yap")}
-              disabled={false}
+              onClick={() => setShowSaleModal(true)}
             >
               Satış Yap
+            </CButton>
+            <CButton
+              color="warning"
+              style={{ color: "white" }}
+              onClick={handleBulkCancel}
+              disabled={selectedSales.length === 0}
+            >
+              <CIcon icon={cilBan} /> Seçili Satışları İptal Et
             </CButton>
             <CButton
               color="primary"
@@ -807,92 +851,31 @@ const CustomerDetail = () => {
                 Ödeme/Tahsilat
               </CDropdownToggle>
               <CDropdownMenu>
-                <CDropdownItem
-                  onClick={() => handleAction("Nakit-Kredi Kartı-Banka")}
-                  disabled={true}
-                >
-                  Nakit-Kredi Kartı-Banka
-                </CDropdownItem>
-                <CDropdownItem
-                  onClick={() => handleAction("Temazsız Kredi Kartı")}
-                  disabled={true}
-                >
-                  Temazsız Kredi Kartı
-                </CDropdownItem>
-                <CDropdownItem
-                  onClick={() => handleAction("Çek")}
-                  disabled={true}
-                >
-                  Çek
-                </CDropdownItem>
-                <CDropdownItem
-                  onClick={() => handleAction("Müşteriden Senet Al")}
-                  disabled={true}
-                >
-                  Müşteriden Senet Al
-                </CDropdownItem>
-                <CDropdownItem
-                  onClick={() => handleAction("Müşteriye Senet Ver")}
-                  disabled={true}
-                >
-                  Müşteriye Senet Ver
-                </CDropdownItem>
-                <CDropdownItem
-                  onClick={() => handleAction("Bakiye Düzelt")}
-                  disabled={true}
-                >
-                  Bakiye Düzelt
-                </CDropdownItem>
-                <CDropdownItem
-                  onClick={() => handleAction("Borç-Alacak Fişleri")}
-                  disabled={true}
-                >
-                  Borç-Alacak Fişleri
-                </CDropdownItem>
-                <CDropdownItem
-                  onClick={() => handleAction("Cari Virman")}
-                  disabled={true}
-                >
-                  Cari Virman
-                </CDropdownItem>
+                <CDropdownItem disabled>Nakit-Kredi Kartı-Banka</CDropdownItem>
+                <CDropdownItem disabled>Temazsız Kredi Kartı</CDropdownItem>
+                <CDropdownItem disabled>Çek</CDropdownItem>
+                <CDropdownItem disabled>Müşteriden Senet Al</CDropdownItem>
+                <CDropdownItem disabled>Müşteriye Senet Ver</CDropdownItem>
+                <CDropdownItem disabled>Bakiye Düzelt</CDropdownItem>
+                <CDropdownItem disabled>Borç-Alacak Fişleri</CDropdownItem>
+                <CDropdownItem disabled>Cari Virman</CDropdownItem>
               </CDropdownMenu>
             </CDropdown>
-
             <CDropdown>
               <CDropdownToggle color="secondary" disabled={true}>
                 Hesap Ekstresi
               </CDropdownToggle>
               <CDropdownMenu>
-                <CDropdownItem
-                  onClick={() => handleAction("Ekstre Linki")}
-                  disabled={true}
-                >
-                  Ekstre Linki
-                </CDropdownItem>
-                <CDropdownItem
-                  onClick={() => handleAction("Ekstre")}
-                  disabled={true}
-                >
-                  Ekstre
-                </CDropdownItem>
-                <CDropdownItem
-                  onClick={() => handleAction("Detaylı Ekstre")}
-                  disabled={true}
-                >
-                  Detaylı Ekstre
-                </CDropdownItem>
-                <CDropdownItem
-                  onClick={() => handleAction("Mutabakat Mektubu")}
-                  disabled={true}
-                >
-                  Mutabakat Mektubu
-                </CDropdownItem>
+                <CDropdownItem disabled>Ekstre Linki</CDropdownItem>
+                <CDropdownItem disabled>Ekstre</CDropdownItem>
+                <CDropdownItem disabled>Detaylı Ekstre</CDropdownItem>
+                <CDropdownItem disabled>Mutabakat Mektubu</CDropdownItem>
               </CDropdownMenu>
             </CDropdown>
             <CButton
               color="primary"
               style={{ color: "white" }}
-              onClick={() => handleAction("Döküman Yükle")}
+              onClick={() => addToast("Döküman Yükle işlemi başlatıldı.", "success")}
               disabled={true}
             >
               Döküman Yükle
@@ -905,30 +888,15 @@ const CustomerDetail = () => {
                 <CDropdownItem onClick={() => setShowUpdateModal(true)}>
                   Müşteri Bilgilerini Güncelle
                 </CDropdownItem>
-                <CDropdownItem
-                  onClick={() => handleAction("E-Posta Gönderi Durumu")}
-                  disabled={true}
-                >
-                  E-Posta Gönderi Durumu
-                </CDropdownItem>
-                <CDropdownItem
-                  onClick={() => handleAction("Alış Yap")}
-                  disabled={true}
-                >
-                  Alış Yap
-                </CDropdownItem>
+                <CDropdownItem disabled>E-Posta Gönderi Durumu</CDropdownItem>
+                <CDropdownItem disabled>Alış Yap</CDropdownItem>
                 <CDropdownItem onClick={() => setShowDeleteModal(true)}>
                   Müşteriyi Sil
                 </CDropdownItem>
                 <CDropdownItem onClick={handleActivate}>
                   Müşteriyi Aktif Et
                 </CDropdownItem>
-                <CDropdownItem
-                  onClick={() => handleAction("Etiket Yazdır")}
-                  disabled={true}
-                >
-                  Etiket Yazdır
-                </CDropdownItem>
+                <CDropdownItem disabled>Etiket Yazdır</CDropdownItem>
               </CDropdownMenu>
             </CDropdown>
           </div>
@@ -961,12 +929,26 @@ const CustomerDetail = () => {
                             </>
                           ) : table.type === "sales" ? (
                             <>
+                              <CTableHeaderCell>
+                                <CFormInput
+                                  type="checkbox"
+                                  checked={selectedSales.length === sales.length}
+                                  onChange={() =>
+                                    setSelectedSales(
+                                      selectedSales.length === sales.length
+                                        ? []
+                                        : sales.map((sale) => sale.satisId)
+                                    )
+                                  }
+                                />
+                              </CTableHeaderCell>
                               <CTableHeaderCell>Barkod</CTableHeaderCell>
                               <CTableHeaderCell>Ürün Adı</CTableHeaderCell>
                               <CTableHeaderCell>Fiyat</CTableHeaderCell>
                               <CTableHeaderCell>Birim</CTableHeaderCell>
                               <CTableHeaderCell>Miktar</CTableHeaderCell>
                               <CTableHeaderCell>Toplam Fiyat</CTableHeaderCell>
+                              <CTableHeaderCell>Durumu</CTableHeaderCell>
                               <CTableHeaderCell>İşlemler</CTableHeaderCell>
                             </>
                           ) : (
@@ -1008,9 +990,7 @@ const CustomerDetail = () => {
                                     <CButton
                                       color="danger"
                                       size="sm"
-                                      onClick={() =>
-                                        handleDeleteBranch(branch.id)
-                                      }
+                                      onClick={() => handleDeleteBranch(branch.id)}
                                       style={{ color: "white" }}
                                     >
                                       <CIcon icon={cilTrash} />
@@ -1020,72 +1000,67 @@ const CustomerDetail = () => {
                               </CTableRow>
                             ))
                           : table.type === "sales"
-                            ? sales.map((sale) => (
-                                <CTableRow key={sale.id}>
-                                  <CTableDataCell>{sale.barkod}</CTableDataCell>
-                                  <CTableDataCell>
-                                    {sale.urunAdi}
-                                  </CTableDataCell>
-                                  <CTableDataCell>
-                                    {sale.fiyat.toLocaleString("tr-TR")} TRY
-                                  </CTableDataCell>
-                                  <CTableDataCell>{sale.birim}</CTableDataCell>
-                                  <CTableDataCell>{sale.miktar}</CTableDataCell>
-                                  <CTableDataCell>
-                                    {sale.toplamFiyat.toLocaleString("tr-TR")}{" "}
-                                    TRY
-                                  </CTableDataCell>
-                                  <CTableDataCell>
-                                    <div className="d-flex gap-2">
-                                      <CButton
-                                        color="info"
-                                        size="sm"
-                                        onClick={() => handleEditSale(sale)}
-                                        style={{ color: "white" }}
-                                      >
-                                        <CIcon icon={cilPen} />
-                                      </CButton>
-                                      <CButton
-                                        color="danger"
-                                        size="sm"
-                                        onClick={() =>
-                                          handleDeleteSale(sale.id)
-                                        }
-                                        style={{ color: "white" }}
-                                      >
-                                        <CIcon icon={cilTrash} />
-                                      </CButton>
-                                    </div>
-                                  </CTableDataCell>
-                                </CTableRow>
-                              ))
-                            : table.data.map((item) => (
-                                <CTableRow
-                                  key={item.id}
-                                  onClick={() =>
-                                    handleItemClick(item, table.type)
-                                  }
-                                >
-                                  <CTableDataCell>
+                          ? sales.map((sale) => (
+                              <CTableRow key={sale.id}>
+                                <CTableDataCell>
+                                  <CFormInput
+                                    type="checkbox"
+                                    checked={selectedSales.includes(sale.satisId)}
+                                    onChange={() => handleSelectSale(sale.satisId)}
+                                  />
+                                </CTableDataCell>
+                                <CTableDataCell>{sale.barkod}</CTableDataCell>
+                                <CTableDataCell>{sale.urunAdi}</CTableDataCell>
+                                <CTableDataCell>{sale.fiyat}</CTableDataCell>
+                                <CTableDataCell>{sale.birim}</CTableDataCell>
+                                <CTableDataCell>{sale.miktar}</CTableDataCell>
+                                <CTableDataCell>{sale.toplamFiyat}</CTableDataCell>
+                                <CTableDataCell>{sale.durumu === 1 ? "Aktif" : "İptal"}</CTableDataCell>
+                                <CTableDataCell>
+                                  <div className="d-flex gap-2">
                                     <CButton
-                                      color="success"
+                                      color="info"
                                       size="sm"
+                                      onClick={() => handleEditSale(sale)}
                                       style={{ color: "white" }}
-                                      onClick={() =>
-                                        handleItemClick(null, table.type)
-                                      }
                                     >
-                                      <CIcon icon={cilPlus} /> Yeni
+                                      <CIcon icon={cilPen} />
                                     </CButton>
-                                  </CTableDataCell>
-                                  <CTableDataCell>{item.date}</CTableDataCell>
-                                  <CTableDataCell>{item.no}</CTableDataCell>
-                                  <CTableDataCell>{item.status}</CTableDataCell>
-                                  <CTableDataCell>
-                                    {item.amount.toLocaleString("tr-TR")} TRY
-                                  </CTableDataCell>
-                                </CTableRow>
-                              ))}
+                                    <CButton
+                                      color="danger"
+                                      size="sm"
+                                      onClick={() => handleDeleteSale(sale.id)}
+                                      style={{ color: "white" }}
+                                    >
+                                      <CIcon icon={cilTrash} />
+                                    </CButton>
+                                    <CButton
+                                      color="warning"
+                                      size="sm"
+                                      onClick={() => handleCancelSales(sale.satisId)}
+                                      style={{ color: "white" }}
+                                      disabled={sale.durumu === 0}
+                                    >
+                                      <CIcon icon={cilBan} />
+                                    </CButton>
+                                  </div>
+                                </CTableDataCell>
+                              </CTableRow>
+                            ))
+                          : table.data.map((item, index) => (
+                              <CTableRow key={index}>
+                                <CTableDataCell>
+                                  {new Date().toLocaleDateString()}
+                                </CTableDataCell>
+                                <CTableDataCell>{item.no || "Yok"}</CTableDataCell>
+                                <CTableDataCell>
+                                  {item.durum || "Bilinmiyor"}
+                                </CTableDataCell>
+                                <CTableDataCell>
+                                  {(item.tutar || 0).toLocaleString("tr-TR")} TRY
+                                </CTableDataCell>
+                              </CTableRow>
+                            ))}
                       </CTableBody>
                     </CTable>
                   </CCardBody>
@@ -1095,539 +1070,365 @@ const CustomerDetail = () => {
           </CRow>
         </CCol>
       </CRow>
-      <CModal
-        visible={showModal}
-        onClose={() => setShowModal(false)}
-        backdrop="static"
-      >
-        <CModalHeader>
-          <CModalTitle>
-            {modalType.charAt(0).toUpperCase() + modalType.slice(1)} Detayları
-          </CModalTitle>
-        </CModalHeader>
-        <CModalBody>
-          <CTable responsive>
-            <CTableHead>
-              <CTableRow>
-                <CTableHeaderCell>Ürün/Hizmet Adı</CTableHeaderCell>
-                <CTableHeaderCell>Fiyat</CTableHeaderCell>
-                <CTableHeaderCell>Tutar</CTableHeaderCell>
-              </CTableRow>
-            </CTableHead>
-            <CTableBody>
-              {selectedItem && (
-                <CTableRow>
-                  <CTableDataCell>{selectedItem.name}</CTableDataCell>
-                  <CTableDataCell>
-                    {selectedItem.price.toLocaleString("tr-TR")} TRY
-                  </CTableDataCell>
-                  <CTableDataCell>
-                    {selectedItem.amount.toLocaleString("tr-TR")} TRY
-                  </CTableDataCell>
-                </CTableRow>
-              )}
-            </CTableBody>
-          </CTable>
-          <p>
-            <strong>Açıklama:</strong> {selectedItem?.description || "Yok"}
-          </p>
-          <p>
-            <strong>Kullanıcı:</strong> {selectedItem?.user || "Bilinmiyor"}
-          </p>
-        </CModalBody>
-        <CModalFooter>
-          <CButton
-            color="primary"
-            onClick={() => navigate(`/app/${modalType}-entry`)}
-            style={{ color: "white" }}
-          >
-            Satış Ekranına Git
-          </CButton>
-          <CButton color="secondary" onClick={() => setShowModal(false)}>
-            Kapat
-          </CButton>
-        </CModalFooter>
-      </CModal>
+
+      {/* Müşteri Güncelleme Modal */}
+      <CustomerModal
+        visible={showUpdateModal}
+        onClose={() => setShowUpdateModal(false)}
+        customer={customer}
+        onSave={() => {
+          fetchCustomer();
+          setShowUpdateModal(false);
+        }}
+      />
+
+      {/* Şube Ekleme Modal */}
       <CModal
         visible={showBranchModal}
         onClose={() => setShowBranchModal(false)}
-        backdrop="static"
       >
-        <CModalHeader style={{ backgroundColor: "#2965A8", color: "white" }}>
+        <CModalHeader>
           <CModalTitle>Yeni Şube Ekle</CModalTitle>
         </CModalHeader>
         <CModalBody>
           <CForm>
-            <div className="mb-3">
-              <CFormLabel className="form-label">Şube Adı</CFormLabel>
-              <CFormInput
-                type="text"
-                name="adi"
-                value={formData.adi}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, adi: e.target.value }))
-                }
-                required
-              />
-            </div>
-            <div className="mb-3">
-              <CFormLabel className="form-label">Şube Adresi</CFormLabel>
-              <CFormInput
-                type="text"
-                name="adres"
-                value={formData.adres}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, adres: e.target.value }))
-                }
-              />
-            </div>
-            <div className="mb-3">
-              <CFormLabel className="form-label">Şube Kodu</CFormLabel>
-              <CFormInput
-                type="text"
-                name="kodu"
-                value={formData.kodu}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, kodu: e.target.value }))
-                }
-              />
-            </div>
-            <div className="mb-3">
-              <CFormCheck
-                label="Aktif"
-                name="aktif"
-                checked={formData.aktif}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, aktif: e.target.checked }))
-                }
-                style={{ color: "white" }}
-              />
-            </div>
+            <CRow className="mb-3">
+              <CCol>
+                <CFormLabel>Şube Adı</CFormLabel>
+                <CFormInput
+                  value={formData.adi}
+                  onChange={(e) =>
+                    setFormData({ ...formData, adi: e.target.value })
+                  }
+                  required
+                />
+              </CCol>
+            </CRow>
+            <CRow className="mb-3">
+              <CCol>
+                <CFormLabel>Adres</CFormLabel>
+                <CFormInput
+                  value={formData.adres}
+                  onChange={(e) =>
+                    setFormData({ ...formData, adres: e.target.value })
+                  }
+                />
+              </CCol>
+            </CRow>
+            <CRow className="mb-3">
+              <CCol>
+                <CFormLabel>Kod</CFormLabel>
+                <CFormInput
+                  value={formData.kodu}
+                  onChange={(e) =>
+                    setFormData({ ...formData, kodu: e.target.value })
+                  }
+                />
+              </CCol>
+            </CRow>
+            <CRow className="mb-3">
+              <CCol>
+                <CFormCheck
+                  label="Aktif"
+                  checked={formData.aktif}
+                  onChange={(e) =>
+                    setFormData({ ...formData, aktif: e.target.checked })
+                  }
+                />
+              </CCol>
+            </CRow>
           </CForm>
         </CModalBody>
         <CModalFooter>
-          <CButton
-            color="primary"
-            style={{ backgroundColor: "#2965A8", color: "white" }}
-            onClick={handleAddBranch}
-            disabled={loading}
-          >
-            Ekle
+          <CButton color="secondary" onClick={() => setShowBranchModal(false)}>
+            İptal
           </CButton>
           <CButton
-            color="secondary"
-            style={{ color: "white" }}
-            onClick={() => {
-              setShowBranchModal(false);
-              setFormData({ adi: "", adres: "", kodu: "", aktif: true });
-            }}
+            color="primary"
+            onClick={handleAddBranch}
+            disabled={loading || !formData.adi}
           >
-            İptal
+            Kaydet
           </CButton>
         </CModalFooter>
       </CModal>
+
+      {/* Şube Güncelleme Modal */}
       <CModal
         visible={showBranchUpdateModal}
         onClose={() => setShowBranchUpdateModal(false)}
-        backdrop="static"
       >
-        <CModalHeader style={{ backgroundColor: "#2965A8", color: "white" }}>
+        <CModalHeader>
           <CModalTitle>Şube Güncelle</CModalTitle>
         </CModalHeader>
         <CModalBody>
           <CForm>
-            <div className="mb-3">
-              <CFormLabel className="form-label">Şube Adı</CFormLabel>
-              <CFormInput
-                type="text"
-                name="adi"
-                value={formData.adi}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, adi: e.target.value }))
-                }
-                required
-              />
-            </div>
-            <div className="mb-3">
-              <CFormLabel className="form-label">Şube Adresi</CFormLabel>
-              <CFormInput
-                type="text"
-                name="adres"
-                value={formData.adres}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, adres: e.target.value }))
-                }
-              />
-            </div>
-            <div className="mb-3">
-              <CFormLabel className="form-label">Şube Kodu</CFormLabel>
-              <CFormInput
-                type="text"
-                name="kodu"
-                value={formData.kodu}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, kodu: e.target.value }))
-                }
-              />
-            </div>
-            <div className="mb-3">
-              <CFormCheck
-                label="Aktif"
-                name="aktif"
-                checked={formData.aktif}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, aktif: e.target.checked }))
-                }
-                style={{ color: "white" }}
-              />
-            </div>
+            <CRow className="mb-3">
+              <CCol>
+                <CFormLabel>Şube Adı</CFormLabel>
+                <CFormInput
+                  value={formData.adi}
+                  onChange={(e) =>
+                    setFormData({ ...formData, adi: e.target.value })
+                  }
+                  required
+                />
+              </CCol>
+            </CRow>
+            <CRow className="mb-3">
+              <CCol>
+                <CFormLabel>Adres</CFormLabel>
+                <CFormInput
+                  value={formData.adres}
+                  onChange={(e) =>
+                    setFormData({ ...formData, adres: e.target.value })
+                  }
+                />
+              </CCol>
+            </CRow>
+            <CRow className="mb-3">
+              <CCol>
+                <CFormLabel>Kod</CFormLabel>
+                <CFormInput
+                  value={formData.kodu}
+                  onChange={(e) =>
+                    setFormData({ ...formData, kodu: e.target.value })
+                  }
+                />
+              </CCol>
+            </CRow>
+            <CRow className="mb-3">
+              <CCol>
+                <CFormCheck
+                  label="Aktif"
+                  checked={formData.aktif}
+                  onChange={(e) =>
+                    setFormData({ ...formData, aktif: e.target.checked })
+                  }
+                />
+              </CCol>
+            </CRow>
           </CForm>
         </CModalBody>
         <CModalFooter>
           <CButton
-            color="primary"
-            style={{ backgroundColor: "#2965A8", color: "white" }}
-            onClick={handleUpdateBranch}
-            disabled={loading}
-          >
-            Güncelle
-          </CButton>
-          <CButton
             color="secondary"
-            style={{ color: "white" }}
             onClick={() => setShowBranchUpdateModal(false)}
           >
             İptal
           </CButton>
+          <CButton
+            color="primary"
+            onClick={handleUpdateBranch}
+            disabled={loading || !formData.adi}
+          >
+            Güncelle
+          </CButton>
         </CModalFooter>
       </CModal>
-      <CModal
-        visible={showSaleModal}
-        onClose={() => {
-          setShowSaleModal(false);
-          setSaleFormData({
-            barkod: "",
-            urunAdi: "",
-            fiyat: "",
-            birim: "adet",
-            miktar: "",
-            toplamFiyat: "",
-            musteriId: id,
-          });
-          setSaleItems([]);
-        }}
-        backdrop="static"
-        size="lg"
-      >
-        <CModalHeader style={{ backgroundColor: "#2965A8", color: "white" }}>
-          <CModalTitle>Yeni Satış</CModalTitle>
+
+      {/* Satış Ekleme Modal */}
+      <CModal visible={showSaleModal} onClose={() => setShowSaleModal(false)}>
+        <CModalHeader>
+          <CModalTitle>Satış Yap</CModalTitle>
         </CModalHeader>
         <CModalBody>
           <CForm>
-            <CRow>
-              <CCol md={6} className="mb-3">
-                <CFormLabel className="form-label">Barkod</CFormLabel>
+            <CRow className="mb-3">
+              <CCol md={6}>
+                <CFormLabel>Barkod</CFormLabel>
                 <CFormInput
-                  type="text"
                   name="barkod"
                   value={saleFormData.barkod}
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setSaleFormData((prev) => ({
-                      ...prev,
-                      barkod: value,
-                    }));
-                    handleBarcodeChange(value);
-                  }}
-                  onKeyPress={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      fetchProductByBarcode(saleFormData.barkod);
-                    }
-                  }}
-                  placeholder="Barkod girin veya okutun"
-                  autoFocus
+                  onChange={handleSaleFormChange}
                 />
               </CCol>
-              <CCol md={6} className="mb-3">
-                <CFormLabel className="form-label">Ürün Adı</CFormLabel>
+              <CCol md={6}>
+                <CFormLabel>Ürün Adı</CFormLabel>
                 <CFormInput
-                  type="text"
                   name="urunAdi"
                   value={saleFormData.urunAdi}
-                  onChange={(e) =>
-                    setSaleFormData((prev) => ({
-                      ...prev,
-                      urunAdi: e.target.value,
-                    }))
-                  }
-                  placeholder="Ürün adı girin"
-                  required
+                  onChange={handleSaleFormChange}
                 />
               </CCol>
             </CRow>
-            <CRow>
-              <CCol md={4} className="mb-3">
-                <CFormLabel className="form-label">Fiyat (TRY)</CFormLabel>
+            <CRow className="mb-3">
+              <CCol md={4}>
+                <CFormLabel>Fiyat</CFormLabel>
                 <CFormInput
-                  type="number"
                   name="fiyat"
-                  value={saleFormData.fiyat}
-                  onChange={(e) => {
-                    const fiyat = e.target.value;
-                    const miktar = parseFloat(saleFormData.miktar) || 0;
-                    const toplamFiyat =
-                      fiyat && miktar
-                        ? (parseFloat(fiyat) * miktar).toFixed(2)
-                        : "";
-
-                    setSaleFormData((prev) => ({
-                      ...prev,
-                      fiyat: fiyat,
-                      toplamFiyat: toplamFiyat,
-                    }));
-                  }}
-                  placeholder="Fiyat girin"
-                  min="0"
+                  type="number"
                   step="0.01"
-                  required
+                  value={saleFormData.fiyat}
+                  onChange={handleSaleFormChange}
                 />
               </CCol>
-              <CCol md={4} className="mb-3">
-                <CFormLabel className="form-label">Birim</CFormLabel>
+              <CCol md={4}>
+                <CFormLabel>Birim</CFormLabel>
                 <CFormSelect
                   name="birim"
                   value={saleFormData.birim}
-                  onChange={(e) =>
-                    setSaleFormData((prev) => ({
-                      ...prev,
-                      birim: e.target.value,
-                    }))
-                  }
+                  onChange={handleSaleFormChange}
                 >
                   <option value="adet">Adet</option>
-                  <option value="metre">Metre</option>
-                  <option value="kilogram">Kilogram</option>
-                  <option value="litre">Litre</option>
+                  <option value="kg">Kg</option>
+                  <option value="lt">Lt</option>
+                  <option value="m">Metre</option>
                 </CFormSelect>
               </CCol>
-              <CCol md={4} className="mb-3">
-                <CFormLabel className="form-label">Miktar</CFormLabel>
+              <CCol md={4}>
+                <CFormLabel>Miktar</CFormLabel>
                 <CFormInput
-                  type="number"
                   name="miktar"
-                  value={saleFormData.miktar}
-                  onChange={(e) => {
-                    const miktar = e.target.value;
-                    const fiyat = parseFloat(saleFormData.fiyat) || 0;
-                    const toplamFiyat =
-                      miktar && fiyat
-                        ? (parseFloat(miktar) * fiyat).toFixed(2)
-                        : "";
-
-                    setSaleFormData((prev) => ({
-                      ...prev,
-                      miktar: miktar,
-                      toplamFiyat: toplamFiyat,
-                    }));
-                  }}
-                  placeholder="Miktar girin"
-                  min="0"
+                  type="number"
                   step="0.01"
-                  required
+                  value={saleFormData.miktar}
+                  onChange={handleSaleFormChange}
                 />
               </CCol>
             </CRow>
-            <CButton
-              color="primary"
-              style={{ color: "white", backgroundColor: "#2965A8" }}
-              onClick={handleAddSaleItem}
-            >
-              Ürün Ekle
-            </CButton>
-          </CForm>
-          <hr />
-          <h5>Eklenen Ürünler</h5>
-          <CTable responsive>
-            <CTableHead>
-              <CTableRow>
-                <CTableHeaderCell>Barkod</CTableHeaderCell>
-                <CTableHeaderCell>Ürün Adı</CTableHeaderCell>
-                <CTableHeaderCell>Fiyat</CTableHeaderCell>
-                <CTableHeaderCell>Birim</CTableHeaderCell>
-                <CTableHeaderCell>Miktar</CTableHeaderCell>
-                <CTableHeaderCell>Toplam</CTableHeaderCell>
-                <CTableHeaderCell>İşlemler</CTableHeaderCell>
-              </CTableRow>
-            </CTableHead>
-            <CTableBody>
-              {saleItems.length > 0 ? (
-                saleItems.map((item) => (
+            <CRow className="mb-3">
+              <CCol>
+                <CFormLabel>Toplam Fiyat</CFormLabel>
+                <CFormInput
+                  value={saleFormData.toplamFiyat}
+                  readOnly
+                  disabled
+                />
+              </CCol>
+            </CRow>
+            <CRow className="mb-3">
+              <CCol>
+                <CButton color="primary" onClick={handleAddSaleItem}>
+                  Ürün Ekle
+                </CButton>
+              </CCol>
+            </CRow>
+            <CTable responsive>
+              <CTableHead>
+                <CTableRow>
+                  <CTableHeaderCell>Barkod</CTableHeaderCell>
+                  <CTableHeaderCell>Ürün Adı</CTableHeaderCell>
+                  <CTableHeaderCell>Fiyat</CTableHeaderCell>
+                  <CTableHeaderCell>Birim</CTableHeaderCell>
+                  <CTableHeaderCell>Miktar</CTableHeaderCell>
+                  <CTableHeaderCell>Toplam Fiyat</CTableHeaderCell>
+                  <CTableHeaderCell>İşlemler</CTableHeaderCell>
+                </CTableRow>
+              </CTableHead>
+              <CTableBody>
+                {saleItems.map((item) => (
                   <CTableRow key={item.id}>
-                    <CTableDataCell>{item.barkod || "Yok"}</CTableDataCell>
+                    <CTableDataCell>{item.barkod}</CTableDataCell>
                     <CTableDataCell>{item.urunAdi}</CTableDataCell>
-                    <CTableDataCell>
-                      {item.fiyat.toLocaleString("tr-TR")} TRY
-                    </CTableDataCell>
+                    <CTableDataCell>{item.fiyat}</CTableDataCell>
                     <CTableDataCell>{item.birim}</CTableDataCell>
                     <CTableDataCell>{item.miktar}</CTableDataCell>
-                    <CTableDataCell>
-                      {item.toplamFiyat.toLocaleString("tr-TR")} TRY
-                    </CTableDataCell>
+                    <CTableDataCell>{item.toplamFiyat}</CTableDataCell>
                     <CTableDataCell>
                       <CButton
                         color="danger"
                         size="sm"
-                        style={{ color: "white" }}
                         onClick={() => handleDeleteSaleItem(item.id)}
-                        disabled={loading}
                       >
-                        <CIcon icon={cilTrash} />
+                        Sil
                       </CButton>
                     </CTableDataCell>
                   </CTableRow>
-                ))
-              ) : (
-                <CTableRow>
-                  <CTableDataCell colSpan={7}>
-                    Henüz ürün eklenmedi.
-                  </CTableDataCell>
-                </CTableRow>
-              )}
-            </CTableBody>
-          </CTable>
-          <div className="mt-3">
-            <strong>Toplam Fiyat: </strong>
-            {calculateTotalPrice()} TRY
-          </div>
+                ))}
+              </CTableBody>
+            </CTable>
+            <CRow>
+              <CCol>
+                <strong>Toplam: {calculateTotalPrice()} TRY</strong>
+              </CCol>
+            </CRow>
+          </CForm>
         </CModalBody>
         <CModalFooter>
-          <CButton
-            color="primary"
-            style={{ backgroundColor: "#2965A8", color: "white" }}
-            onClick={handleSaveSales}
-            disabled={loading}
-          >
-            Kaydet
+          <CButton color="secondary" onClick={() => setShowSaleModal(false)}>
+            İptal
           </CButton>
           <CButton
-            color="secondary"
-            style={{ color: "white" }}
-            onClick={() => {
-              setShowSaleModal(false);
-              setSaleFormData({
-                barkod: "",
-                urunAdi: "",
-                fiyat: "",
-                birim: "adet",
-                miktar: "",
-                toplamFiyat: "",
-                musteriId: id,
-              });
-              setSaleItems([]);
-            }}
+            color="primary"
+            onClick={handleSaveSales}
+            disabled={loading || saleItems.length === 0}
           >
-            İptal
+            Satışı Kaydet
           </CButton>
         </CModalFooter>
       </CModal>
+
+      {/* Satış Güncelleme Modal */}
       <CModal
         visible={showSaleUpdateModal}
         onClose={() => setShowSaleUpdateModal(false)}
-        backdrop="static"
-        size="lg"
       >
-        <CModalHeader style={{ backgroundColor: "#2965A8", color: "white" }}>
+        <CModalHeader>
           <CModalTitle>Satış Güncelle</CModalTitle>
         </CModalHeader>
         <CModalBody>
           <CForm>
-            <CRow>
-              <CCol md={6} className="mb-3">
-                <CFormLabel className="form-label">Barkod</CFormLabel>
+            <CRow className="mb-3">
+              <CCol md={6}>
+                <CFormLabel>Barkod</CFormLabel>
                 <CFormInput
-                  type="text"
                   name="barkod"
                   value={saleFormData.barkod}
-                  onChange={(e) =>
-                    setSaleFormData((prev) => ({
-                      ...prev,
-                      barkod: e.target.value,
-                    }))
-                  }
-                  placeholder="Barkod girin"
+                  onChange={handleSaleFormChange}
                 />
               </CCol>
-              <CCol md={6} className="mb-3">
-                <CFormLabel className="form-label">Ürün Adı</CFormLabel>
+              <CCol md={6}>
+                <CFormLabel>Ürün Adı</CFormLabel>
                 <CFormInput
-                  type="text"
                   name="urunAdi"
                   value={saleFormData.urunAdi}
-                  onChange={(e) =>
-                    setSaleFormData((prev) => ({
-                      ...prev,
-                      urunAdi: e.target.value,
-                    }))
-                  }
-                  placeholder="Ürün adı girin"
-                  required
+                  onChange={handleSaleFormChange}
                 />
               </CCol>
             </CRow>
-            <CRow>
-              <CCol md={4} className="mb-3">
-                <CFormLabel className="form-label">Fiyat (TRY)</CFormLabel>
+            <CRow className="mb-3">
+              <CCol md={4}>
+                <CFormLabel>Fiyat</CFormLabel>
                 <CFormInput
-                  type="number"
                   name="fiyat"
-                  value={saleFormData.fiyat}
-                  onChange={(e) =>
-                    setSaleFormData((prev) => ({
-                      ...prev,
-                      fiyat: e.target.value,
-                    }))
-                  }
-                  placeholder="Fiyat girin"
-                  min="0"
+                  type="number"
                   step="0.01"
-                  required
+                  value={saleFormData.fiyat}
+                  onChange={handleSaleFormChange}
                 />
               </CCol>
-              <CCol md={4} className="mb-3">
-                <CFormLabel className="form-label">Birim</CFormLabel>
+              <CCol md={4}>
+                <CFormLabel>Birim</CFormLabel>
                 <CFormSelect
                   name="birim"
                   value={saleFormData.birim}
-                  onChange={(e) =>
-                    setSaleFormData((prev) => ({
-                      ...prev,
-                      birim: e.target.value,
-                    }))
-                  }
+                  onChange={handleSaleFormChange}
                 >
                   <option value="adet">Adet</option>
-                  <option value="metre">Metre</option>
-                  <option value="kilogram">Kilogram</option>
-                  <option value="litre">Litre</option>
+                  <option value="kg">Kg</option>
+                  <option value="lt">Lt</option>
+                  <option value="m">Metre</option>
                 </CFormSelect>
               </CCol>
-              <CCol md={4} className="mb-3">
-                <CFormLabel className="form-label">Miktar</CFormLabel>
+              <CCol md={4}>
+                <CFormLabel>Miktar</CFormLabel>
                 <CFormInput
-                  type="number"
                   name="miktar"
-                  value={saleFormData.miktar}
-                  onChange={(e) =>
-                    setSaleFormData((prev) => ({
-                      ...prev,
-                      miktar: e.target.value,
-                    }))
-                  }
-                  placeholder="Miktar girin"
-                  min="0"
+                  type="number"
                   step="0.01"
-                  required
+                  value={saleFormData.miktar}
+                  onChange={handleSaleFormChange}
+                />
+              </CCol>
+            </CRow>
+            <CRow className="mb-3">
+              <CCol>
+                <CFormLabel>Toplam Fiyat</CFormLabel>
+                <CFormInput
+                  value={saleFormData.toplamFiyat}
+                  readOnly
+                  disabled
                 />
               </CCol>
             </CRow>
@@ -1635,52 +1436,37 @@ const CustomerDetail = () => {
         </CModalBody>
         <CModalFooter>
           <CButton
+            color="secondary"
+            onClick={() => setShowSaleUpdateModal(false)}
+          >
+            İptal
+          </CButton>
+          <CButton
             color="primary"
-            style={{ backgroundColor: "#2965A8", color: "white" }}
             onClick={handleUpdateSale}
             disabled={loading}
           >
             Güncelle
           </CButton>
-          <CButton
-            color="secondary"
-            style={{ color: "white" }}
-            onClick={() => setShowSaleUpdateModal(false)}
-          >
-            İptal
-          </CButton>
         </CModalFooter>
       </CModal>
-      <CustomerModal
-        visible={showUpdateModal}
-        onClose={() => setShowUpdateModal(false)}
-        onSubmit={(data) => {
-          fetchCustomer();
-          setCustomer({ ...customer, ...data });
-          addToast("Müşteri güncellendi.", "success");
-          setShowUpdateModal(false);
-        }}
-        customer={customer}
-        addToast={addToast}
-      />
-      <CModal
-        visible={showDeleteModal}
-        onClose={() => setShowDeleteModal(false)}
-        backdrop="static"
-      >
-        <CModalHeader style={{ backgroundColor: "#dc3545", color: "white" }}>
-          <CModalTitle>Silme Onayı</CModalTitle>
+
+      {/* Müşteri Silme Onay Modal */}
+      <CModal visible={showDeleteModal} onClose={() => setShowDeleteModal(false)}>
+        <CModalHeader>
+          <CModalTitle>Müşteriyi Sil</CModalTitle>
         </CModalHeader>
         <CModalBody>
-          Bu müşteriyi silmek istediğinizden emin misiniz? Bu işlem geri
-          alınamaz.
+          <p>
+            {customer.name} adlı müşteriyi silmek istediğinizden emin misiniz?
+          </p>
         </CModalBody>
         <CModalFooter>
-          <CButton color="danger" onClick={handleDelete}>
-            Evet, Sil
-          </CButton>
           <CButton color="secondary" onClick={() => setShowDeleteModal(false)}>
-            Hayır
+            İptal
+          </CButton>
+          <CButton color="danger" onClick={handleDelete} disabled={loading}>
+            Sil
           </CButton>
         </CModalFooter>
       </CModal>

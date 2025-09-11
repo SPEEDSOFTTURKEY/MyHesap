@@ -17,6 +17,17 @@ export const EmployeesProvider = ({ children }) => {
   const [error, setError] = useState(null);
   const [employeeBalances, setEmployeeBalances] = useState({});
 
+  // Kullanıcı ID'sini al
+  const getUserId = () => {
+    try {
+      const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+      return user.id;
+    } catch (err) {
+      console.error("Kullanıcı ID'si alınırken hata:", err);
+      return 0;
+    }
+  };
+
   const fetchEmployees = useCallback(async () => {
     setLoading(true);
     try {
@@ -156,6 +167,11 @@ export const EmployeesProvider = ({ children }) => {
   }, []);
 
   const addEmployee = async (employeeData, file) => {
+    const userId = getUserId();
+    if (!userId) {
+      return { success: false, message: "Geçerli bir kullanıcı oturumu bulunamadı." };
+    }
+
     try {
       const formPayload = new FormData();
       Object.keys(employeeData).forEach((key) => {
@@ -170,6 +186,9 @@ export const EmployeesProvider = ({ children }) => {
       if (file) formPayload.append("fotograf", file);
       formPayload.append("eklenmeTarihi", new Date().toISOString());
       formPayload.append("guncellenmeTarihi", new Date().toISOString());
+      formPayload.append("KullaniciId", userId); // Kullanıcı ID'si eklendi
+      formPayload.append("EkleyenKullaniciId", userId); // Ekleyen kullanıcı ID'si
+      formPayload.append("GuncelleyenKullaniciId", userId); // Güncelleyen kullanıcı ID'si
 
       const response = await api.post(
         `${API_BASE_URL}/calisan/calisan-create`,
@@ -209,6 +228,11 @@ export const EmployeesProvider = ({ children }) => {
   };
 
   const updateEmployee = async (employeeId, employeeData, file) => {
+    const userId = getUserId();
+    if (!userId) {
+      return { success: false, message: "Geçerli bir kullanıcı oturumu bulunamadı." };
+    }
+
     try {
       const formPayload = new FormData();
       formPayload.append("id", employeeId);
@@ -223,6 +247,8 @@ export const EmployeesProvider = ({ children }) => {
       });
       if (file) formPayload.append("fotograf", file);
       formPayload.append("guncellenmeTarihi", new Date().toISOString());
+      formPayload.append("KullaniciId", userId); // Kullanıcı ID'si eklendi
+      formPayload.append("GuncelleyenKullaniciId", userId); // Güncelleyen kullanıcı ID'si
 
       const response = await api.put(
         `${API_BASE_URL}/calisan/calisan-update`,
@@ -269,9 +295,14 @@ export const EmployeesProvider = ({ children }) => {
   };
 
   const deleteEmployee = async (employeeId) => {
-    console.log("deleteEmployee fonksiyonu çağrıldı"); //--->
+    const userId = getUserId();
+    if (!userId) {
+      return { success: false, message: "Geçerli bir kullanıcı oturumu bulunamadı." };
+    }
+
+    console.log("deleteEmployee fonksiyonu çağrıldı, ID:", employeeId, "Kullanıcı ID:", userId);
     try {
-      await api.delete(`${API_BASE_URL}/calisan/calisan-delete/${employeeId}`, {
+      await api.delete(`${API_BASE_URL}/calisan/calisan-delete/${employeeId}?kullaniciId=${userId}`, {
         headers: { accept: "*/*" },
       });
       setEmployees((prev) => prev.filter((emp) => emp.id !== employeeId));

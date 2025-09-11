@@ -59,12 +59,23 @@ const CreditDetail = () => {
   const [paymentForm, setPaymentForm] = useState({
     date: dayjs().format("YYYY-MM-DD"),
     amount: "",
-    hesapId: "", // Hesap ID'si için yeni alan
+    hesapId: "",
+    kullaniciId: 0,
   });
   const API_BASE_URL = "https://localhost:44375/api";
 
   const [paymentDate, setPaymentDate] = useState(dayjs());
   const toaster = useRef();
+
+  const getUserId = () => {
+    try {
+      const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+      return user.id;
+    } catch (err) {
+      console.error("Kullanıcı ID'si alınırken hata:", err);
+      return 0;
+    }
+  };
 
   const addToast = (message, type = "success") => {
     const toast = (
@@ -83,18 +94,19 @@ const CreditDetail = () => {
   const fetchAccounts = async () => {
     setLoading(true);
     try {
-      const response = await axios.get(
+      const { data } = await axios.get(
         `${API_BASE_URL}/Hesap/hesap-get-allaktif`,
         {
           headers: { accept: "*/*" },
         },
       );
-      setAccounts(response.data);
+      console.log("Hesaplar API response (Hesap/hesap-get-allaktif):", data);
+      setAccounts(data);
       setError(null);
     } catch (err) {
       const errorMessage =
         err.response?.data?.message || "Hesaplar yüklenemedi.";
-      setError(errorMessage);
+      console.error("Hesaplar yüklenemedi:", err);
       addToast(errorMessage, "error");
     } finally {
       setLoading(false);
@@ -116,6 +128,8 @@ const CreditDetail = () => {
         parsedCredit.kredi?.adi || parsedCredit.name || "İsimsiz Kredi";
       parsedCredit.hesapName = parsedCredit.hesapName || "Bilinmeyen Hesap";
       parsedCredit.hesapId = parsedCredit.hesapId || null;
+      parsedCredit.notlar = parsedCredit.kredi?.notlar || parsedCredit.notlar || "-";
+      console.log("Credits verisi (parsedCredit):", parsedCredit);
       setCredit(parsedCredit);
       setError(null);
     } catch (err) {
@@ -136,20 +150,17 @@ const CreditDetail = () => {
         throw new Error("Kredi verisi bulunamadı.");
       }
       const parsedCredit = JSON.parse(storedCredit);
-      if (!parsedCredit.id) {
-        throw new Error("Geçersiz kredi verisi: ID eksik.");
-      }
       const creditId = parsedCredit.id;
 
-      const response = await axios.get(
+      const { data } = await axios.get(
         `${API_BASE_URL}/kredi/kredidetay-get-by-id/${creditId}`,
         {
           headers: { accept: "*/*" },
         },
       );
-      const paymentData = response.data;
-      console.log("paymentdata", paymentData);
+      console.log("Ödemeler API response (kredi/kredidetay-get-by-id):", data);
 
+      const paymentData = data;
       const mappedPayments = Array.isArray(paymentData)
         ? paymentData.map((payment, index) => ({
             id: payment.id || index + 1,
@@ -228,6 +239,12 @@ const CreditDetail = () => {
 
   const handlePaymentModal = async (e) => {
     e.preventDefault();
+    const userId = getUserId();
+    if (!userId) {
+      addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "error");
+      return;
+    }
+
     if (!paymentForm.date || !paymentForm.amount) {
       addToast("Tarih ve tutar zorunlu.", "error");
       return;
@@ -240,15 +257,12 @@ const CreditDetail = () => {
       const parsedCredit = JSON.parse(storedCredit);
       const creditId = parsedCredit.id;
 
-      // Console'dan gelen veriye göre hesapId'yi doğru şekilde al
       let hesapId = paymentForm.hesapId || parsedCredit.hesapId;
 
-      // Eğer parsedCredit.hesapId yoksa, payments dizisinden ilk payment'ın hesapId'sini al
       if (!hesapId && payments.length > 0) {
         hesapId = payments[0].hesapId;
       }
 
-      // Eğer hala yoksa ve form'da seçim yoksa hata ver
       if (!hesapId) {
         addToast("Lütfen hesap seçin.", "error");
         return;
@@ -257,7 +271,6 @@ const CreditDetail = () => {
       console.log("Credit data:", parsedCredit);
       console.log("Selected hesapId:", hesapId);
 
-      // Create the payload
       const payload = {
         KrediId: parseInt(creditId),
         HesapId: parseInt(hesapId),
@@ -265,18 +278,16 @@ const CreditDetail = () => {
         Tutar: parseFloat(paymentForm.amount),
         OdemeDurum: 0,
         TaksitNo: payments.length + 1,
+        kullaniciId: userId,
       };
 
-      // Enhanced logging for debugging
-      console.dir(
-        { message: "Payload sent to /api/kredi/kredidetay-create", payload },
-        { depth: null },
-      );
+      console.log("Ödeme ekleme payload:", payload);
 
       const response = await axios.post(
         `${API_BASE_URL}/kredi/kredidetay-create`,
         payload,
       );
+      console.log("Ödeme ekleme API response (kredi/kredidetay-create):", response.data);
 
       if (response.data) {
         const newPayment = {
@@ -286,8 +297,8 @@ const CreditDetail = () => {
           amount: parseFloat(paymentForm.amount),
           hesapId: parseInt(hesapId),
           hesapname:
-            accounts.find((a) => a.id === parseInt(hesapId))?.tanim ||
-            "Bilinmeyen Hesap",
+            accounts.find((a) => a.id === parseInt(hesapId))
+              ?.tanim || "Bilinmeyen Hesap",
           paid: false,
           installmentNumber: payments.length + 1,
         };
@@ -298,18 +309,25 @@ const CreditDetail = () => {
           date: dayjs().format("YYYY-MM-DD"),
           amount: "",
           hesapId: "",
+          kullaniciId: userId,
         });
         setPaymentDate(dayjs());
       }
     } catch (err) {
       const errorMessage =
-        err.response?.data?.Message || err.message || "Ödeme eklenemedi.";
-      addToast(errorMessage, "error");
+        err.response?.data?.Message || err.message || "Bilinmeyen hata";
+      addToast(`Ödeme eklenemedi: ${errorMessage}`, "error");
       console.error("Payment creation error:", err);
     }
   };
 
   const handleDeleteModal = async () => {
+    const userId = getUserId();
+    if (!userId) {
+      addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "error");
+      return;
+    }
+
     try {
       const storedCredit = sessionStorage.getItem("selectedCredit");
       if (!storedCredit) {
@@ -318,12 +336,16 @@ const CreditDetail = () => {
       const parsedCredit = JSON.parse(storedCredit);
       const creditId = parsedCredit.id;
 
-      await axios.delete(
-        `${API_BASE_URL}/kredi/delete/${creditId}`,
+      console.log("Kredi silme isteği: ID =", creditId, "Kullanıcı ID =", userId);
+
+      const response = await axios.delete(
+        `${API_BASE_URL}/kredi/delete/${creditId}?kullaniciId=${userId}`,
         {
           headers: { accept: "*/*" },
         },
       );
+      console.log("Kredi delete API response (kredi/delete):", response.data);
+
       addToast("Kredi başarıyla silindi.", "success");
       sessionStorage.removeItem("selectedCredit");
       navigate("/app/credits");
@@ -337,6 +359,12 @@ const CreditDetail = () => {
   };
 
   const handlePaymentMake = async (paymentId) => {
+    const userId = getUserId();
+    if (!userId) {
+      addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "error");
+      return;
+    }
+
     try {
       const storedCredit = sessionStorage.getItem("selectedCredit");
       if (!storedCredit) {
@@ -345,18 +373,25 @@ const CreditDetail = () => {
       const parsedCredit = JSON.parse(storedCredit);
       const creditId = parsedCredit.id;
 
-      await axios.put(
+      const payload = {
+        Id: paymentId,
+        KrediId: parseInt(creditId),
+        OdemeDurum: 1,
+        kullaniciId: userId,
+      };
+
+      console.log("Ödeme yapma payload:", payload);
+
+      const response = await axios.put(
         `${API_BASE_URL}/kredi/kredidetay-update/${paymentId}`,
-        {
-          KrediId: parseInt(creditId),
-          OdemeDurum: 1,
-        },
+        payload,
       );
+      console.log("Ödeme yapma API response (kredi/kredidetay-update):", response.data);
 
       const updatedPayments = payments.map((p) =>
         p.id === paymentId ? { ...p, paid: true } : p,
       );
-      console.log("payment", payments);
+      console.log("Updated payments:", updatedPayments);
       setPayments(updatedPayments);
       addToast("Ödeme işlemi başlatıldı.", "success");
     } catch (err) {
@@ -427,7 +462,7 @@ const CreditDetail = () => {
               </p>
               <p>
                 <strong>Notlar:</strong>{" "}
-                {credit.kredi?.notlar || credit.notlar || "-"}
+                {credit.notlar || credit.kredi?.notlar || "-"}
               </p>
             </CCardBody>
           </CCard>
@@ -547,7 +582,13 @@ const CreditDetail = () => {
                 (key) => paymentScheduleMap[key] === data.paymentSchedule,
               ) || 1;
 
-            await axios.put(`${API_BASE_URL}/kredi/update`, {
+            const userId = getUserId();
+            if (!userId) {
+              addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "error");
+              return;
+            }
+
+            const payload = {
               Id: creditId,
               Adi: data.name,
               KalanBorc: parseFloat(data.remainingAmount),
@@ -559,7 +600,19 @@ const CreditDetail = () => {
               Durumu: 1,
               EklenmeTarihi: parsedCredit.eklenmeTarihi,
               GuncellenmeTarihi: new Date().toISOString(),
-            });
+              kullaniciId: userId,
+            };
+
+            console.log("Kredi güncelleme payload:", payload);
+
+            const response = await axios.put(
+              `${API_BASE_URL}/kredi/update/${creditId}`,
+              payload,
+              {
+                headers: { "Content-Type": "application/json" },
+              },
+            );
+            console.log("Kredi update API response (kredi/update):", response.data);
 
             const updatedCredit = {
               ...parsedCredit,
@@ -598,13 +651,11 @@ const CreditDetail = () => {
           nextPaymentDate:
             credit.ilkTaksitTarihi || credit.kredi?.ilkTaksitTarih,
           paymentSchedule:
-            Object.keys(paymentScheduleMap).find(
-              (key) => paymentScheduleMap[key] === credit.odemeTakvimText,
-            ) ||
-            credit.kredi?.odemeTakvim ||
-            "monthly",
+            credit.odemeTakvimText ||
+            paymentScheduleMap[credit.kredi?.odemeTakvim] ||
+            "Aylık",
           accountId: credit.hesapId,
-          notes: credit.notlar || credit.kredi?.notlar,
+          notes: credit.notlar || credit.kredi?.notlar || "",
         }}
         addToast={addToast}
         accounts={accounts}

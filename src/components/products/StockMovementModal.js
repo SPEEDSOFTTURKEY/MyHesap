@@ -52,6 +52,7 @@ const StockMovementModal = ({
     try {
       setLoading(true);
       const { data } = await api.get(`${API_BASE_URL}/depo/get-all`);
+      console.log("Raw depo data from API (depo/get-all):", data); // API verisini logla
       setWarehouses(data.filter((item) => item.durumu === 1));
     } catch (err) {
       addToast(err.response?.data?.message || "Depolar yüklenemedi.", "error");
@@ -66,6 +67,7 @@ const StockMovementModal = ({
       const { data } = await api.get(
         `${API_BASE_URL}/urun/urun-depolardaki-stoklar/${urunId}`
       );
+      console.log("Raw stock data from API (urun-depolardaki-stoklar):", data); // API verisini logla
       const depotStock = data.find(
         (stock) => stock.depoId === parseInt(depoId)
       );
@@ -129,6 +131,9 @@ const StockMovementModal = ({
         throw new Error("Ürün ID'si bulunamadı.");
       }
 
+      // Kullanıcı ID'sini al
+      const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+
       // Depo ID'sinin geçerli olduğunu doğrula
       const selectedWarehouse = warehouses.find(
         (w) => w.id === parseInt(formData.warehouseId)
@@ -173,12 +178,14 @@ const StockMovementModal = ({
           kritikStok: product.criticalStock,
           etiketler: product.tags.join(","),
           fotograf: product.images[0] || "",
+          kullaniciId: user.id, // Kullanıcı ID'sini ekle
         };
         console.log("Creating new product with payload:", newProductData);
         const { data } = await api.post(
           `${API_BASE_URL}/urun/urun-create`,
           newProductData
         );
+        console.log("Response from API (urun-create):", data); // API verisini logla
         newProductId = data.id;
         addToast("Yeni ürün oluşturuldu.", "success");
       }
@@ -210,6 +217,7 @@ const StockMovementModal = ({
         "IslemTarihi",
         formData.transactionDate.format("YYYY-MM-DDTHH:mm:ss.SSSZ")
       );
+      stockMovementData.append("KullaniciId", user.id); // Kullanıcı ID'sini ekle
 
       // Stok hareketi payload'unu logla
       console.log(
@@ -229,6 +237,7 @@ const StockMovementModal = ({
           },
         }
       );
+      console.log("Response from API (urun-manuelstokgiris):", stockResponse); // API verisini logla
 
       // Depo stoğunu al
       const currentStock = await fetchCurrentStock(
@@ -249,11 +258,12 @@ const StockMovementModal = ({
 
       // Depo stok güncelleme için JSON payload oluştur
       const stockUpdateData = {
-        UrunId: newProductId,
-        DepoMiktarlari: [
+        urunId: newProductId,
+        kullaniciId: user.id, // Kullanıcı ID'sini ekle
+        depoMiktarlari: [
           {
-            DepoId: parseInt(formData.warehouseId),
-            Miktar: newStockValue,
+            depoId: parseInt(formData.warehouseId),
+            miktar: newStockValue,
           },
         ],
       };
@@ -265,7 +275,11 @@ const StockMovementModal = ({
       );
 
       // Depo stok güncelleme isteğini gönder
-      await api.post(`${API_BASE_URL}/urun/urun-toplu-depostok-guncelle`, stockUpdateData);
+      const { data: stockUpdateResponse } = await api.post(
+        `${API_BASE_URL}/urun/urun-toplu-depostok-guncelle`,
+        stockUpdateData
+      );
+      console.log("Response from API (urun-toplu-depostok-guncelle):", stockUpdateResponse); // API verisini logla
 
       // Tablo için hareket verisini hazırla
       const newMovement = {

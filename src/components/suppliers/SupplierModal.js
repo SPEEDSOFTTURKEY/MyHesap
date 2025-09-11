@@ -46,6 +46,7 @@ const SupplierModal = ({
     tedarikciSiniflandirmaId: "",
     kodu: "",
     aciklama: "",
+    kullaniciId: 0,
   });
   const [activeTab, setActiveTab] = useState("identity");
   const [loading, setLoading] = useState(false);
@@ -75,6 +76,7 @@ const SupplierModal = ({
         tedarikciSiniflandirmaId: supplier.classification || "",
         kodu: supplier.accountingCode || "",
         aciklama: supplier.note || "",
+        kullaniciId: 0, // Will be updated with actual user ID
       });
     }
   }, [supplier]);
@@ -85,11 +87,13 @@ const SupplierModal = ({
       const { data } = await api.get(
         `${API_BASE_URL}/tedarikciSiniflandirma/get-all`
       );
+      console.log("Classifications API response (tedarikciSiniflandirma/get-all):", data);
       setClassifications(data.filter((item) => item.durumu === 1));
       setErrorMessage(null);
     } catch (err) {
       const errorMsg =
         err.response?.data?.message || "Sınıflandırmalar yüklenemedi.";
+      console.error("Sınıflandırma yükleme hatası:", err.response?.data || err.message);
       setErrorMessage(errorMsg);
       addToast(errorMsg, "error");
     } finally {
@@ -143,6 +147,12 @@ const SupplierModal = ({
     }
     try {
       setLoading(true);
+      const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+      if (!user.id) {
+        addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "error");
+        return;
+      }
+
       const supplierData = {
         id: formData.id || 0,
         unvan: formData.unvan || "",
@@ -162,6 +172,7 @@ const SupplierModal = ({
         kodu: formData.kodu || "",
         aciklama: formData.aciklama || "",
         fotograf: formData.image || formData.fotograf || "",
+        kullaniciId: user.id,
       };
 
       const formDataToSend = new FormData();
@@ -191,6 +202,13 @@ const SupplierModal = ({
               headers: { "Content-Type": "multipart/form-data" },
             }
           );
+
+      console.log(
+        formData.id
+          ? "Update API response (tedarikci/tedarikci-update):"
+          : "Create API response (tedarikci/tedarikci-create):",
+        response.data
+      );
 
       onSubmit({
         ...supplierData,
@@ -240,6 +258,7 @@ const SupplierModal = ({
       tedarikciSiniflandirmaId: "",
       kodu: "",
       aciklama: "",
+      kullaniciId: 0,
     });
     setErrors({});
     setErrorMessage(null);

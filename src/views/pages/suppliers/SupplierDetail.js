@@ -60,7 +60,7 @@ const getPhotoUrl = (foto) => {
     return `${foto}?t=${new Date().getTime()}`;
   }
   const normalizedFoto = foto.startsWith("/") ? foto : `/${foto}`;
-  return `${BASE_PHOTO_URL}${normalizedFoto}?t=${new Date().getTime()}`;
+  return `${API_BASE_URL}${normalizedFoto}?t=${new Date().getTime()}`;
 };
 
 const SupplierDetail = () => {
@@ -287,12 +287,14 @@ const SupplierDetail = () => {
   const fetchData = async (url, setData) => {
     try {
       const { data } = await api.get(url);
+      console.log(`API Response for ${url}:`, data);
       const filteredData = Array.isArray(data)
         ? data.filter((item) => item.durumu === 1)
         : [data].filter((item) => item.durumu === 1);
       setData(filteredData);
       return filteredData;
     } catch (err) {
+      console.error(`Error fetching data from ${url}:`, err.response?.data || err.message);
       addToast(err.response?.data?.message || "Veriler yüklenemedi.", "error");
       return [];
     }
@@ -316,6 +318,7 @@ const SupplierDetail = () => {
               `${API_BASE_URL}/tedarikciSiniflandirma/get-by-id/${apiSupplier.tedarikciSiniflandirmaId}`,
               { headers: { accept: "*/*" } },
             );
+            console.log("Classification API response (tedarikciSiniflandirma/get-by-id):", classificationResponse.data);
             if (classificationResponse.data) {
               classificationName =
                 classificationResponse.data.adi || classificationName;
@@ -374,7 +377,7 @@ const SupplierDetail = () => {
         { headers: { accept: "*/*" } },
       );
 
-      console.log("API Response:", data);
+      console.log("API Response (tedarikci/tedarikci-get-by-Id):", data);
 
       if (!data) {
         throw new Error("Tedarikçi verisi alınamadı.");
@@ -414,6 +417,8 @@ const SupplierDetail = () => {
         `${API_BASE_URL}/alis/alis-get-by-tedarikci-id/${id}`,
         { headers: { accept: "*/*" } },
       );
+
+      console.log("Purchases API response (alis/alis-get-by-tedarikci-id):", data);
 
       const items = Array.isArray(data) ? data : [];
 
@@ -476,6 +481,7 @@ const SupplierDetail = () => {
             `${API_BASE_URL}/urun/urun-get-all`,
             { headers: { accept: "*/*" } },
           );
+          console.log("Products API response (urun/urun-get-all):", productsResponse.data);
           const products = Array.isArray(productsResponse.data)
             ? productsResponse.data
             : [];
@@ -488,6 +494,7 @@ const SupplierDetail = () => {
                 : idToName.get(p.productId) || p.name || "",
           }));
         } catch (e) {
+          console.error("Ürün isimleri yüklenemedi:", e);
           // Ürün isimleri doldurulamazsa, mevcut isimleri kullanmaya devam et
         }
       }
@@ -499,6 +506,7 @@ const SupplierDetail = () => {
           `${API_BASE_URL}/tedarikciodeme/tedarikciodeme-get-by-tedarikciId/${id}`,
           { headers: { accept: "*/*" } },
         );
+        console.log("Payments API response (tedarikciodeme/tedarikciodeme-get-by-tedarikciId):", paymentsResponse.data);
         const paymentsData = Array.isArray(paymentsResponse.data)
           ? paymentsResponse.data
           : [];
@@ -536,6 +544,7 @@ const SupplierDetail = () => {
         setPayments([]);
       }
     } catch (err) {
+      console.error("Alışlar ve ödemeler yüklenirken hata:", err);
       addToast(err.response?.data?.message || "Veriler yüklenemedi.", "error");
       setPurchases([]);
       setPayments([]);
@@ -610,6 +619,12 @@ const SupplierDetail = () => {
     }
 
     try {
+      const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+      if (!user.id) {
+        addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "error");
+        return;
+      }
+
       const paymentData = {
         tedarikciId: Number(paymentForm.tedarikciId),
         paraBirimi: paymentForm.paraBirimi || "TRY", // NULL KORUMA
@@ -618,13 +633,15 @@ const SupplierDetail = () => {
         tarih: paymentForm.tarih,
         durumu: 1,
         aktif: 1,
+        kullaniciId: user.id, // Kullanıcı ID'si eklendi
       };
-      console.log(paymentData);
-      await api.post(
+      console.log("Payment create payload:", paymentData);
+      const response = await api.post(
         `${API_BASE_URL}/tedarikciodeme/tedarikciodeme-create`,
         paymentData,
         { headers: { "Content-Type": "multipart/form-data", accept: "*/*" } },
       );
+      console.log("Payment create API response (tedarikciodeme/tedarikciodeme-create):", response.data);
       addToast("Ödeme başarıyla kaydedildi.", "success");
       handlePaymentModalClose();
 
@@ -649,11 +666,17 @@ const SupplierDetail = () => {
     }
     setLoading(true);
     try {
-      console.log("Silme isteği gönderiliyor: ID =", id);
-      await api.delete(
-        `${API_BASE_URL}/tedarikci/tedarikci-delete/${id}`,
+      const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+      if (!user.id) {
+        addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "error");
+        return;
+      }
+      console.log("Silme isteği gönderiliyor: ID =", id, "Kullanıcı ID =", user.id);
+      const response = await api.delete(
+        `${API_BASE_URL}/tedarikci/tedarikci-delete/${id}?kullaniciId=${user.id}`,
         { headers: { accept: "*/*" } },
       );
+      console.log("Delete API response (tedarikci/tedarikci-delete):", response.data);
       addToast("Tedarikçi başarıyla silindi.", "success");
       navigate("/app/suppliers");
     } catch (err) {
@@ -1436,4 +1459,5 @@ const SupplierDetail = () => {
     </>
   );
 };
+
 export default SupplierDetail;

@@ -65,6 +65,13 @@ const Sales = () => {
   });
   const [saleItems, setSaleItems] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState("");
+  const [user] = useState({
+    id: 1002,
+    aktiflikDurumu: 1,
+    durumu: 1,
+    yetkiId: 1,
+    kullaniciAdi: "gizem",
+  });
   const toaster = useRef();
 
   // Toast bildirimi ekleme
@@ -124,9 +131,10 @@ const Sales = () => {
 
   // Component mount olduğunda satışları ve müşterileri getir
   useEffect(() => {
+    console.log("Giriş yapan kullanıcı bilgileri:", user);
     fetchSales();
     fetchCustomers();
-  }, [fetchSales, fetchCustomers]);
+  }, [fetchSales, fetchCustomers, user]);
 
   // Yeni müşteri satış modalını aç
   const handleNewCustomerSale = () => {
@@ -211,24 +219,33 @@ const Sales = () => {
   // Yeni müşteri ve satış oluştur
   const handleNewCustomerSaleSubmit = async () => {
     try {
-      if (!newCustomer.unvani || !newCustomer.email) {
-        addToast("Unvan ve e-posta zorunlu.", "error");
+      if (!newCustomer.unvani?.trim()) {
+        addToast("Unvan zorunlu.", "error");
+        return;
+      }
+      if (!newCustomer.email?.trim()) {
+        addToast("E-posta zorunlu.", "error");
         return;
       }
       if (saleItems.length === 0) {
         addToast("En az bir ürün eklenmeli.", "error");
         return;
       }
+      if (!user.id) {
+        addToast("Kullanıcı ID'si eksik.", "error");
+        return;
+      }
 
       const customerData = {
-        unvani: newCustomer.unvani,
-        email: newCustomer.email,
-        telefon: newCustomer.telefon,
-        vergiDairesi: newCustomer.vergiDairesi,
-        vergiNumarasi: newCustomer.vergiNumarasi,
-        adres: newCustomer.adres,
+        unvani: newCustomer.unvani.trim(),
+        email: newCustomer.email.trim(),
+        telefon: newCustomer.telefon || "",
+        vergiDairesi: newCustomer.vergiDairesi || "",
+        vergiNumarasi: newCustomer.vergiNumarasi || "",
+        adres: newCustomer.adres || "",
         durumu: 1,
         aktif: 1,
+        kullaniciId: user.id, // Kullanıcı ID'si ekleniyor
       };
 
       const customerResponse = await api.post(`${API_BASE_URL}/musteri/musteri-create`, customerData);
@@ -242,14 +259,21 @@ const Sales = () => {
         birim: item.birim,
         miktar: item.miktar,
         toplamFiyat: item.toplamFiyat,
+        kullaniciId: user.id, // Kullanıcı ID'si ekleniyor
       }));
+
+      console.log("Gönderilen satış verisi:", saleData);
 
       const response = await api.post(`${API_BASE_URL}/musteriSatis/musteriSatis-create`, saleData);
       addToast(response.data.Message || "Satış başarıyla kaydedildi.");
       setNewCustomerModal(false);
       fetchSales();
     } catch (err) {
-      console.error("Yeni Müşteri Satış Hatası:", err);
+      console.error("Yeni Müşteri Satış Hatası:", {
+        message: err?.response?.data?.message || err.message,
+        status: err?.response?.status,
+        data: err?.response?.data,
+      });
       addToast(err.response?.data?.Message || "Satış kaydedilemedi.", "error");
     }
   };
@@ -264,6 +288,10 @@ const Sales = () => {
       addToast("En az bir ürün eklenmeli.", "error");
       return;
     }
+    if (!user.id) {
+      addToast("Kullanıcı ID'si eksik.", "error");
+      return;
+    }
 
     try {
       const saleData = saleItems.map((item) => ({
@@ -274,14 +302,21 @@ const Sales = () => {
         birim: item.birim,
         miktar: item.miktar,
         toplamFiyat: item.toplamFiyat,
+        kullaniciId: user.id, // Kullanıcı ID'si ekleniyor
       }));
+
+      console.log("Gönderilen satış verisi:", saleData);
 
       const response = await api.post(`${API_BASE_URL}/musteriSatis/musteriSatis-create`, saleData);
       addToast(response.data.Message || "Satış başarıyla kaydedildi.");
       setRegisteredCustomerModal(false);
       fetchSales();
     } catch (err) {
-      console.error("Kayıtlı Müşteri Satış Hatası:", err);
+      console.error("Kayıtlı Müşteri Satış Hatası:", {
+        message: err?.response?.data?.message || err.message,
+        status: err?.response?.status,
+        data: err?.response?.data,
+      });
       addToast(err.response?.data?.Message || "Satış kaydedilemedi.", "error");
     }
   };
@@ -372,7 +407,6 @@ const Sales = () => {
           <CRow className="d-flex justify-content-between align-items-center">
             <CCol className="d-flex align-items-center justify-content-between">
               <div className="d-flex gap-2">
-      
                 <CDropdown>
                   <CDropdownToggle color="light">{timeFilter}</CDropdownToggle>
                   <CDropdownMenu>
@@ -415,7 +449,6 @@ const Sales = () => {
               />
             </CCol>
           </CRow>
-    
         </CCardHeader>
         <CCardBody>
           {loading && <p>Yükleniyor...</p>}
@@ -439,7 +472,7 @@ const Sales = () => {
                   {filteredSales.map((sale) => (
                     <CTableRow key={sale.id}>
                       <CTableDataCell>{new Date(sale.eklenmeTarihi).toLocaleDateString()}</CTableDataCell>
-                      <CTableDataCell>{sale.musteri?.unvani}</CTableDataCell>
+                      <CTableDataCell>{sale.musteris?.unvani}</CTableDataCell>
                       <CTableDataCell>{sale.satisId}</CTableDataCell>
                       <CTableDataCell>{sale.urunAdi}</CTableDataCell>
                       <CTableDataCell>{sale.miktar}</CTableDataCell>

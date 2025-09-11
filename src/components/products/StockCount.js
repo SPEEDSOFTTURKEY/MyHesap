@@ -66,36 +66,44 @@ const StockCount = () => {
       setLoading(true);
       if (!product) {
         console.log("Fetching product with ID:", urunId);
-        const { data } = await api.get(
+        const productResponse = await api.get(
           `${API_BASE_URL}/urun/urun-get-by-id/${urunId}`,
         );
-        console.log("Raw product data from API:", data); // Log raw product data
-        if (data.durumu !== 1) {
+        console.log("API Response from /urun/urun-get-by-id:", productResponse);
+        console.log("Raw product data from API (urun-get-by-id):", productResponse.data);
+        
+        if (productResponse.data.durumu !== 1) {
           throw new Error("Ürün bulunamadı veya aktif değil.");
         }
         // ProductDetail'daki gibi mapApiProductToLocal ile eşleştir
-        const mappedProduct = mapApiProductToLocal(data);
+        const mappedProduct = mapApiProductToLocal(productResponse.data);
         setProduct(mappedProduct);
       }
 
       console.log("Fetching all depots");
-      const { data: depoData } = await api.get(
+      const depoResponse = await api.get(
         `${API_BASE_URL}/depo/get-all`,
       );
-      const activeDepolar = Array.isArray(depoData)
-        ? depoData.filter((depo) => depo.durumu === 1)
+      console.log("API Response from /depo/get-all:", depoResponse);
+      console.log("Raw depo data from API (depo/get-all):", depoResponse.data);
+      
+      const activeDepolar = Array.isArray(depoResponse.data)
+        ? depoResponse.data.filter((depo) => depo.durumu === 1)
         : [];
       setDepolar(activeDepolar);
 
       console.log("Fetching stock data for urunId:", urunId);
-      const { data: stockData } = await api.get(
+      const stockResponse = await api.get(
         `${API_BASE_URL}/urun/urun-depolardaki-stoklar/${urunId}`,
       );
-      if (!Array.isArray(stockData)) {
+      console.log("API Response from /urun/urun-depolardaki-stoklar:", stockResponse);
+      console.log("Raw stock data from API (urun-depolardaki-stoklar):", stockResponse.data);
+      
+      if (!Array.isArray(stockResponse.data)) {
         throw new Error("Stok verisi dizi formatında değil.");
       }
-      const activeStocks = stockData.filter((stock) => stock.durumu === 1);
-      console.log("Table stock data:", activeStocks); // Log table stock data
+      const activeStocks = stockResponse.data.filter((stock) => stock.durumu === 1);
+      console.log("Table stock data:", activeStocks);
       setStoklar(activeStocks);
 
       const initialSayilanMiktarlar = activeStocks.reduce((acc, stock) => {
@@ -106,6 +114,7 @@ const StockCount = () => {
       console.log("Initial stock data:", activeStocks);
     } catch (err) {
       console.error("Veri yükleme hatası:", err.response?.data || err.message);
+      console.error("Error details:", err);
       const errorMessage =
         err.response?.status === 404
           ? "Stok verileri için endpoint bulunamadı."
@@ -163,8 +172,13 @@ const StockCount = () => {
   const handleSave = async () => {
     try {
       setLoading(true);
+      
+      // Kullanıcı ID'sini al
+      const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+      
       const payload = {
         urunId: parseInt(urunId),
+        kullaniciId: user.id,
         depoMiktarlari: Object.entries(sayilanMiktarlar).map(
           ([depoId, miktar]) => ({
             depoId: parseInt(depoId),
@@ -173,10 +187,14 @@ const StockCount = () => {
         ),
       };
       console.log("Saving stock data:", payload);
-      await api.post(
+      
+      const response = await api.post(
         `${API_BASE_URL}/urun/urun-toplu-depostok-guncelle`,
         payload,
       );
+      console.log("API Response from /urun/urun-toplu-depostok-guncelle:", response);
+      console.log("Response data from API (urun-toplu-depostok-guncelle):", response.data);
+      
       addToast("Stoklar güncellendi.", "success");
       navigate(`/app/products/${urunId}`, { state: { product } });
     } catch (err) {
@@ -184,6 +202,7 @@ const StockCount = () => {
         "Stok güncelleme hatası:",
         err.response?.data || err.message,
       );
+      console.error("Error details:", err);
       addToast(
         err.response?.data?.message || "Stoklar güncellenemedi.",
         "error",

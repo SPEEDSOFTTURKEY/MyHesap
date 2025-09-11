@@ -23,6 +23,7 @@ import EmployeeHeader from "../../../components/employees/EmployeeHeader";
 import EmployeeActions from "../../../components/employees/EmployeeActions";
 import EmployeeTable from "../../../components/employees/EmployeeTable";
 import EmployeeModals from "../../../components/employees/EmployeeModals";
+
 const API_BASE_URL = "https://localhost:44375/api";
 
 const accountCategories = [
@@ -51,38 +52,14 @@ const getPhotoUrl = (foto) => {
 const EmployeeDetail = () => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
-  const handleDelete = async () => {
-    //--
-    /*const result = await deleteEmployee(selectedEmployee.id);
-    addToast(result.message, result.success ? "başarılı" : "hata");
-  
-    if (result.success) {
-      navigate("/app/employees");  */
-    setShowDeleteModal(true); //* butona basınca doğrudan silmez modal çıkartır
-  };
-
   const navigate = useNavigate();
-
-  const handleNavigation = (path, state = {}) => {
-    navigate(path, { state });
-  };
-
-  const confirmDelete = async () => {
-    console.log("silme baslası");
-    const result = await deleteEmployee(selectedEmployee.id);
-    addToast(result.message, result.success ? "başarılı" : "hata");
-
-    if (result.success) {
-      navigate("/app/employees");
-    }
-    setShowDeleteModal(false);
-  };
 
   const { employeeId } = useParams();
   const { state } = useLocation();
   const {
     selectedEmployee,
     fetchEmployeeById,
+    deleteEmployee,
     employeeBalances,
     fetchEmployeeBalance,
     loading: employeeLoading,
@@ -107,6 +84,30 @@ const EmployeeDetail = () => {
 
   const addToast = (message, type = "başarılı") => {
     setToasts((prev) => [...prev, { id: Date.now(), message, type }]);
+  };
+
+  const handleDelete = async () => {
+    setShowDeleteModal(true); //* butona basınca doğrudan silmez modal çıkartır
+  };
+
+  const handleNavigation = (path, state = {}) => {
+    navigate(path, { state });
+  };
+
+  const confirmDelete = async () => {
+    console.log("silme baslası");
+    if (!selectedEmployee?.id) {
+      addToast("Silinecek çalışan bulunamadı.", "hata");
+      setShowDeleteModal(false);
+      return;
+    }
+    const result = await deleteEmployee(selectedEmployee.id);
+    addToast(result.message, result.success ? "başarılı" : "hata");
+
+    if (result.success) {
+      navigate("/app/employees");
+    }
+    setShowDeleteModal(false);
   };
 
   const fetchTransactions = useCallback(
