@@ -23,7 +23,7 @@ import {
   cilUser,
 } from "@coreui/icons";
 import { useNavigate } from "react-router-dom";
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 const Register = () => {
   const [adiSoyadi, setAdiSoyadi] = useState("");

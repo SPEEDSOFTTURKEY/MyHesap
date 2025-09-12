@@ -37,7 +37,7 @@ import { cilPlus } from "@coreui/icons";
 import api from "../../../api/api";
 import ErrorBoundary from "../products/ErrorBoundary";
 
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 const Sales = () => {
   const [toasts, setToasts] = useState([]);

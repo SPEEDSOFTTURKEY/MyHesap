@@ -24,7 +24,7 @@ import jsPDF from "jspdf"; // PDF generation
 import "jspdf-autotable"; // For table support in PDF
 
 // API base URL
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 const CustomerTurnoversReport = () => {
   const [formData, setFormData] = useState({

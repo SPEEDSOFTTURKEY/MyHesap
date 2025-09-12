@@ -40,7 +40,7 @@ import {
 import SupplierModal from "../../../components/suppliers/SupplierModal";
 import api from "../../../api/api";
 
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 const DEFAULT_PHOTO = "/fotograf/default-avatar.png";
 
 const getPhotoUrl = (foto) => {

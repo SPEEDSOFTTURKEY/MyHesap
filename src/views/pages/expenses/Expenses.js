@@ -42,7 +42,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { useUsers } from "../../../context/UsersContext";
 import api from "../../../api/api";
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 const Expenses = () => {
   const [isLoading, setIsLoading] = useState(false);

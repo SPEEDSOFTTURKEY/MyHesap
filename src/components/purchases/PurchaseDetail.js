@@ -47,7 +47,7 @@ import { jsPDF } from "jspdf";
 import "jspdf-autotable";
 import dayjs from "dayjs";
 
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -58,6 +58,18 @@ const PurchaseDetail = () => {
   const purchaseId = state?.purchaseId || null;
   const supplier = state?.supplier || null;
   const navigate = useNavigate();
+
+  // Kullanıcı ID'sini al (NewExpense'deki gibi)
+  const getUserId = () => {
+    try {
+      const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+      return user.id;
+    } catch (err) {
+      console.error("Kullanıcı ID'si alınırken hata:", err);
+      return 0;
+    }
+  };
+
   const [toasts, setToasts] = useState([]);
   const [mode, setMode] = useState(
     purchaseId && !isNaN(purchaseId) ? "view" : "create",
@@ -73,6 +85,7 @@ const PurchaseDetail = () => {
     aciklamaAlis: "",
     masrafAnaKategoriId: null,
     masrafAltKategoriId: null,
+    kullaniciId: getUserId(), // Kullanıcı ID'si eklendi
   });
   const [products, setProducts] = useState([]);
   const [selectedProducts, setSelectedProducts] = useState([]);
@@ -88,10 +101,11 @@ const PurchaseDetail = () => {
     miktar: 1,
     depoId: "",
     fiyat: 0,
-    paraBirimi: "TRY", // DEFAULT DEĞER
+    paraBirimi: "TRY",
     kdv: 1,
     indirim: 0,
     aciklamaUrun: "",
+    kullaniciId: getUserId(), // Kullanıcı ID'si eklendi
   });
   const toaster = useRef();
 
@@ -111,7 +125,9 @@ const PurchaseDetail = () => {
 
   const fetchSuppliers = async () => {
     try {
-      const { data } = await api.get(`${API_BASE_URL}/tedarikci/tedarikci-get-all`);
+      const { data } = await api.get(`${API_BASE_URL}/tedarikci/tedarikci-get-all`, {
+        headers: { accept: "*/*" },
+      });
       setSuppliers(data.filter((item) => item.durumu === 1));
     } catch (err) {
       console.error("Fetch Suppliers Error:", err.response?.data || err);
@@ -121,7 +137,9 @@ const PurchaseDetail = () => {
 
   const fetchMainCategories = async () => {
     try {
-      const { data } = await api.get(`${API_BASE_URL}/masrafAnaKategori/masrafAnaKategori-get-all`);
+      const { data } = await api.get(`${API_BASE_URL}/masrafAnaKategori/masrafAnaKategori-get-all`, {
+        headers: { accept: "*/*" },
+      });
       setMainCategories(data);
     } catch (err) {
       console.error("Masraf ana kategoriler yüklenirken hata:", err);
@@ -131,7 +149,9 @@ const PurchaseDetail = () => {
 
   const fetchSubCategories = async (mainCategoryId) => {
     try {
-      const { data } = await api.get(`${API_BASE_URL}/masrafAltKategori/masrafAnaAltKategori-get-by-Id/${mainCategoryId}`);
+      const { data } = await api.get(`${API_BASE_URL}/masrafAltKategori/masrafAnaAltKategori-get-by-Id/${mainCategoryId}`, {
+        headers: { accept: "*/*" },
+      });
       setSubCategories(data);
     } catch (err) {
       console.error("Masraf alt kategoriler yüklenirken hata:", err);
@@ -142,7 +162,9 @@ const PurchaseDetail = () => {
   const fetchPurchase = async (id) => {
     try {
       console.log("Fetching purchase with ID:", id);
-      const { data } = await api.get(`${API_BASE_URL}/alis/alis-get-by-id/${id}`);
+      const { data } = await api.get(`${API_BASE_URL}/alis/alis-get-by-id/${id}`, {
+        headers: { accept: "*/*" },
+      });
 
       let purchaseData = Array.isArray(data) ? data[0] : data;
 
@@ -154,7 +176,9 @@ const PurchaseDetail = () => {
         throw new Error("Alış kaydında ürün ID'si eksik.");
       }
 
-      const productResponse = await api.get(`${API_BASE_URL}/urun/urun-get-all`);
+      const productResponse = await api.get(`${API_BASE_URL}/urun/urun-get-all`, {
+        headers: { accept: "*/*" },
+      });
       const productData = productResponse.data.find(
         (p) => p.id === purchaseData.urunId,
       );
@@ -181,13 +205,14 @@ const PurchaseDetail = () => {
         miktar: purchaseData.miktar || 0,
         depoId: purchaseData.depoId || null,
         fiyat: purchaseData.fiyat || 0,
-        paraBirimi: purchaseData.paraBirimi || "TRY", // NULL KORUMA EKLENDİ
+        paraBirimi: purchaseData.paraBirimi || "TRY",
         kdv: productData.alisKDV || 1,
         indirim: purchaseData.indirim || 0,
         aciklamaUrun: purchaseData.aciklamaUrun || "",
         net: Number(net),
         toplam: Number(toplam),
         urunKategoriId: productData.urunKategoriId || "-",
+        kullaniciId: getUserId(), // Kullanıcı ID'si eklendi
       };
 
       setFormData({
@@ -200,6 +225,7 @@ const PurchaseDetail = () => {
         aciklamaAlis: purchaseData.aciklamaAlis || "",
         masrafAnaKategoriId: purchaseData.masrafAnaKategoriId || null,
         masrafAltKategoriId: purchaseData.masrafAltKategoriId || null,
+        kullaniciId: getUserId(), // Kullanıcı ID'si eklendi
       });
       setSelectedProducts([selectedProduct]);
       setMode("view");
@@ -211,7 +237,9 @@ const PurchaseDetail = () => {
 
   const fetchProducts = async () => {
     try {
-      const { data } = await api.get(`${API_BASE_URL}/urun/urun-get-all`);
+      const { data } = await api.get(`${API_BASE_URL}/urun/urun-get-all`, {
+        headers: { accept: "*/*" },
+      });
       setProducts(data);
     } catch (err) {
       console.error("Ürünler yüklenirken hata:", err.message);
@@ -221,7 +249,9 @@ const PurchaseDetail = () => {
 
   const fetchWarehouses = async () => {
     try {
-      const { data } = await api.get(`${API_BASE_URL}/depo/get-all`);
+      const { data } = await api.get(`${API_BASE_URL}/depo/get-all`, {
+        headers: { accept: "*/*" },
+      });
       setWarehouses(data);
     } catch (err) {
       console.error("Depolar yüklenirken hata:", err.message);
@@ -252,15 +282,21 @@ const PurchaseDetail = () => {
   }, [formData.masrafAnaKategoriId]);
 
   const handleFormChange = (name, value) => {
-    setFormData((prev) => ({ ...prev, [name]: value }));
-    if (name === "masrafAnaKategoriId") {
-      setFormData((prev) => ({ ...prev, masrafAltKategoriId: null }));
-    }
+    setFormData((prev) => ({
+      ...prev,
+      [name]: value,
+      ...(name === "masrafAnaKategoriId" ? { masrafAltKategoriId: null } : {}),
+      kullaniciId: getUserId(), // Kullanıcı ID'sini güncelle
+    }));
   };
 
   const handleProductFormChange = (e) => {
     const { name, value } = e.target;
-    setProductForm((prev) => ({ ...prev, [name]: value }));
+    setProductForm((prev) => ({
+      ...prev,
+      [name]: value,
+      kullaniciId: getUserId(), // Kullanıcı ID'sini güncelle
+    }));
   };
 
   const handleProductSelect = (product) => {
@@ -273,10 +309,11 @@ const PurchaseDetail = () => {
       miktar: 1,
       depoId: "",
       fiyat: product.alisFiyat || 0,
-      paraBirimi: "TRY", // DEFAULT DEĞER
+      paraBirimi: "TRY",
       kdv: product.alisKDV || 1,
       indirim: 0,
       aciklamaUrun: "",
+      kullaniciId: getUserId(), // Kullanıcı ID'si eklendi
     });
     setEditingProductIndex(null);
     setShowProductModal(true);
@@ -294,10 +331,11 @@ const PurchaseDetail = () => {
       miktar: product.miktar,
       depoId: product.depoId || "",
       fiyat: product.fiyat,
-      paraBirimi: product.paraBirimi || "TRY", // NULL KORUMA EKLENDİ
+      paraBirimi: product.paraBirimi || "TRY",
       kdv: product.kdv,
       indirim: product.indirim,
       aciklamaUrun: product.aciklamaUrun,
+      kullaniciId: getUserId(), // Kullanıcı ID'si eklendi
     });
     setEditingProductIndex(index);
     setShowProductModal(true);
@@ -328,13 +366,14 @@ const PurchaseDetail = () => {
       miktar: Number(productForm.miktar) || 0,
       depoId: productForm.depoId || null,
       fiyat: Number(productForm.fiyat) || 0,
-      paraBirimi: productForm.paraBirimi || "TRY", // NULL KORUMA
+      paraBirimi: productForm.paraBirimi || "TRY",
       kdv: Number(productForm.kdv) || 1,
       indirim: Number(productForm.indirim) || 0,
       aciklamaUrun: productForm.aciklamaUrun || "",
       net: Number(net),
       toplam: Number(toplam),
       urunKategoriId: selectedProduct.urunKategoriId || "-",
+      kullaniciId: getUserId(), // Kullanıcı ID'si eklendi
     };
 
     if (editingProductIndex !== null) {
@@ -343,8 +382,10 @@ const PurchaseDetail = () => {
         updated[editingProductIndex] = newProduct;
         return updated;
       });
+      addToast("Ürün güncellendi.", "success");
     } else {
       setSelectedProducts((prev) => [...prev, newProduct]);
+      addToast("Ürün eklendi.", "success");
     }
 
     setShowProductModal(false);
@@ -356,10 +397,11 @@ const PurchaseDetail = () => {
       miktar: 1,
       depoId: "",
       fiyat: 0,
-      paraBirimi: "TRY", // DEFAULT DEĞER
+      paraBirimi: "TRY",
       kdv: 1,
       indirim: 0,
       aciklamaUrun: "",
+      kullaniciId: getUserId(), // Kullanıcı ID'si eklendi
     });
     setSelectedProduct(null);
     setEditingProductIndex(null);
@@ -367,6 +409,7 @@ const PurchaseDetail = () => {
 
   const handleDeleteProduct = (index) => {
     setSelectedProducts((prev) => prev.filter((_, i) => i !== index));
+    addToast("Ürün silindi.", "success");
   };
 
   const calculateTotals = () => {
@@ -410,6 +453,12 @@ const PurchaseDetail = () => {
   };
 
   const handleSubmit = async () => {
+    const userId = getUserId();
+    if (!userId) {
+      addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "error");
+      return;
+    }
+
     try {
       if (!formData.tedarikciId) {
         addToast("Tedarikçi seçimi zorunludur.", "error");
@@ -445,8 +494,6 @@ const PurchaseDetail = () => {
       }
 
       const totals = calculateTotals();
-
-      // PARA BİRİMİ GÜVENLİK KONTROLÜ
       const safeParaBirimi = product.paraBirimi || "TRY";
 
       const purchaseData = {
@@ -470,18 +517,23 @@ const PurchaseDetail = () => {
         durumu: 1,
         eklenmeTarihi: mode === "edit" ? undefined : new Date().toISOString(),
         guncellenmeTarihi: new Date().toISOString(),
-        paraBirimi: safeParaBirimi, // GÜVENLİ PARA BİRİMİ EKLENDİ
+        paraBirimi: safeParaBirimi,
+        kullaniciId: userId, // Kullanıcı ID'si eklendi
       };
 
-      console.log("Request Payload:", purchaseData);
+      console.log("Request Payload (kullaniciId dahil):", purchaseData);
 
       let response;
       if (mode === "edit") {
         console.log("Güncelleme isteği gönderiliyor: /api/alis/alis-update");
-        response = await api.put(`${API_BASE_URL}/alis/alis-update`, purchaseData);
+        response = await api.put(`${API_BASE_URL}/alis/alis-update`, purchaseData, {
+          headers: { "Content-Type": "application/json", accept: "*/*" },
+        });
       } else {
         console.log("Kayıt isteği gönderiliyor: /api/alis/alis-create");
-        response = await api.post(`${API_BASE_URL}/alis/alis-create`, purchaseData);
+        response = await api.post(`${API_BASE_URL}/alis/alis-create`, purchaseData, {
+          headers: { "Content-Type": "application/json", accept: "*/*" },
+        });
       }
 
       console.log("API Response:", response.data);
@@ -508,8 +560,16 @@ const PurchaseDetail = () => {
   };
 
   const handleCancelPurchase = async () => {
+    const userId = getUserId();
+    if (!userId) {
+      addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "error");
+      return;
+    }
+
     try {
-      await api.delete(`${API_BASE_URL}/alis/alis-delete/${purchaseId}`);
+      await api.delete(`${API_BASE_URL}/alis/alis-delete/${purchaseId}/${userId}`, {
+        headers: { accept: "*/*" },
+      });
       addToast("Alış başarıyla iptal edildi.", "success");
       navigate("/app/purchases");
     } catch (err) {
@@ -563,6 +623,8 @@ const PurchaseDetail = () => {
       10,
       y,
     );
+    y += 10;
+    doc.text(`Kullanıcı ID: ${formData.kullaniciId || "-"}`, 10, y); // Kullanıcı ID'si eklendi
     y += 15;
 
     doc.setFontSize(14);
@@ -839,6 +901,12 @@ const PurchaseDetail = () => {
                     </CFormSelect>
                   )}
                 </CCol>
+                {process.env.NODE_ENV === 'development' && (
+                  <CCol xs={12}>
+                    <CFormLabel className="text-muted small">Debug - Kullanıcı ID</CFormLabel>
+                    <p className="text-muted small">{formData.kullaniciId}</p>
+                  </CCol>
+                )}
               </CRow>
             </CCardBody>
           </CCard>
@@ -1083,7 +1151,8 @@ const PurchaseDetail = () => {
                       ? (
                           productForm.miktar *
                           productForm.fiyat *
-                          (1 - productForm.indirim / 100)
+                          (1 - productForm.indirim / 100) *
+                          (1 + productForm.kdv / 100)
                         ).toLocaleString("tr-TR") +
                         " " +
                         (productForm.paraBirimi || "TRY")
@@ -1105,6 +1174,14 @@ const PurchaseDetail = () => {
                 />
               </CCol>
             </CRow>
+            {process.env.NODE_ENV === 'development' && (
+              <CRow>
+                <CCol>
+                  <CFormLabel className="text-muted small">Debug - Ürün Kullanıcı ID</CFormLabel>
+                  <p className="text-muted small">{productForm.kullaniciId}</p>
+                </CCol>
+              </CRow>
+            )}
           </CModalBody>
           <CModalFooter>
             <CButton

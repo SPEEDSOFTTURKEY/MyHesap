@@ -1,4 +1,4 @@
-import { useContext, useState, useEffect } from "react";
+import { useContext, useState, useEffect, useRef } from "react";
 import {
   CTable,
   CTableHead,
@@ -29,7 +29,7 @@ import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import "jspdf-autotable";
 
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -59,6 +59,17 @@ const PurchasesTable = () => {
 
   // Önbellek anahtarı
   const EXCHANGE_CACHE_KEY = "doviz_kurlari_cache";
+
+  // Kullanıcı ID'sini al (NewExpense'deki gibi)
+  const getUserId = () => {
+    try {
+      const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+      return user.id;
+    } catch (err) {
+      console.error("Kullanıcı ID'si alınırken hata:", err);
+      return 0;
+    }
+  };
 
   // Hızlı döviz kuru API'leri
   const getExchangeRatesFast = async () => {
@@ -434,8 +445,18 @@ const PurchasesTable = () => {
   };
 
   const handleDeleteConfirm = async () => {
+    const userId = getUserId();
+    if (!userId) {
+      addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "error");
+      setDeleteModalVisible(false);
+      setSelectedPurchaseId(null);
+      return;
+    }
+
     try {
-      await api.delete(`${API_BASE_URL}/alis/alis-delete/${selectedPurchaseId}`);
+      await api.delete(`${API_BASE_URL}/alis/alis-delete/${selectedPurchaseId}/${userId}`, {
+        headers: { accept: "*/*" },
+      });
       addToast("Alış başarıyla silindi.", "success");
       handleCancelPurchase(selectedPurchaseId);
       setDeleteModalVisible(false);
@@ -453,6 +474,7 @@ const PurchasesTable = () => {
       setSelectedPurchaseId(null);
     }
   };
+
   return (
     <>
       {/* Total Amount Display and Export Buttons */}
@@ -775,4 +797,5 @@ const PurchasesTable = () => {
     </>
   );
 };
+
 export default PurchasesTable;

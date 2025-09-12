@@ -4,6 +4,17 @@ import api from "../api/api";
 import dayjs from "dayjs";
 import { useLocation } from "react-router-dom";
 
+// Kullanıcı ID'sini al
+const getUserId = () => {
+  try {
+    const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+    return user.id;
+  } catch (err) {
+    console.error("Kullanıcı ID'si alınırken hata:", err);
+    return 0;
+  }
+};
+
 const accountCategories = [
   { categoryId: 1, accountName: "Banka Hesapları", type: "bank" },
   { categoryId: 2, accountName: "Kasa Tanımları", type: "cash" },
@@ -14,12 +25,12 @@ const accountCategories = [
 ];
 
 const AccountsContext = createContext();
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 export const AccountsProvider = ({ children }) => {
   const location = useLocation();
   const { users, setUsers } = useUsers();
-  const userId = location.state?.user?.id;
+  const [userId, setUserId] = useState(() => location.state?.user?.id || getUserId());
   const [selectedUser, setSelectedUser] = useState(null);
   const [accounts, setAccounts] = useState(accountCategories);
   const [filteredAccounts, setFilteredAccounts] = useState(accounts);
@@ -32,6 +43,7 @@ export const AccountsProvider = ({ children }) => {
     spendingLimit: "",
     type: "cash",
     description: "",
+    kullaniciId: 0,
   });
   const [accountData, setAccountData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -48,6 +60,7 @@ export const AccountsProvider = ({ children }) => {
     date: dayjs().format("DD.MM.YYYY"),
     recipientAccount: "",
     submissionTimestamp: null,
+    kullaniciId: 0,
   });
   const [rawTransactions, setRawTransactions] = useState([]);
   const [transactions, setTransactions] = useState([]);
@@ -59,11 +72,9 @@ export const AccountsProvider = ({ children }) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const toaster = useRef();
   const processedSubmissions = useRef(new Set());
-  const [showDeleteTransactionModal, setShowDeleteTransactionModal] =
-    useState(false);
+  const [showDeleteTransactionModal, setShowDeleteTransactionModal] = useState(false);
   const [transactionToDelete, setTransactionToDelete] = useState(null);
-  const [showCancelTransactionModal, setShowCancelTransactionModal] =
-    useState(false);
+  const [showCancelTransactionModal, setShowCancelTransactionModal] = useState(false);
   const [transactionToCancel, setTransactionToCancel] = useState(null);
 
   const transactionTypeMap = {
@@ -72,6 +83,28 @@ export const AccountsProvider = ({ children }) => {
     3: "Transfer Çıkış",
     4: "Transfer Giriş",
   };
+
+  // localStorage değişikliklerini dinle ve userId'yi güncelle
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      if (e.key === 'user') {
+        const newUserId = getUserId();
+        setUserId(newUserId);
+        // Form ve transaction form'ları güncelle
+        setFormData(prev => ({ ...prev, kullaniciId: newUserId }));
+        setTransactionForm(prev => ({ ...prev, kullaniciId: newUserId }));
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    // Initial check
+    const initialUserId = getUserId();
+    setUserId(initialUserId);
+    setFormData(prev => ({ ...prev, kullaniciId: initialUserId }));
+    setTransactionForm(prev => ({ ...prev, kullaniciId: initialUserId }));
+
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
 
   const getTextColor = (bgColor) => {
     if (!bgColor) return "#ffffff";
@@ -88,160 +121,200 @@ export const AccountsProvider = ({ children }) => {
     return symbols[currency] || "₺";
   };
 
-  const fetchTransactions = async (userId, hesapId, hesapKategoriId) => {
-    if (!userId || !hesapId || !hesapKategoriId) {
-      setError(
-        "Geçersiz parametreler: userId, hesapId veya hesapKategoriId eksik."
-      );
+  const fetchRelatedTransaction = async (transaction, currentUserId = userId, fallbackHesapKategoriId = null) => {
+    try {
+      const { hesapId, etkilenenHesapId, tutar, islemTarihi, islemTuruId } = transaction;
+      const amount = parseFloat(tutar) || 0;
+      const isOutgoing = islemTuruId === 3;
+
+      if (etkilenenHesapId) {
+        const targetAccountResponse = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-by-Id/${etkilenenHesapId}`);
+        const targetAccount = targetAccountResponse.data;
+        const response = await api.get(`${API_BASE_URL}/hesapHareket/hesapHareket-get-by-Id/${currentUserId}/${etkilenenHesapId}/${targetAccount.hesapKategoriId || fallbackHesapKategoriId || 1}`);
+        const transactions = Array.isArray(response.data) ? response.data : [];
+        const related = transactions.find((t) =>
+          t.etkilenenHesapId === hesapId &&
+          Math.abs(parseFloat(t.tutar) - amount) < 0.01 &&
+          dayjs(t.islemTarihi).isSame(dayjs(islemTarihi), "second") &&
+          t.islemTuruId === (isOutgoing ? 4 : 3)
+        );
+        if (related) {
+          const recipientUser = {
+            id: targetAccount.id,
+            userName: targetAccount.tanim || "Bilinmeyen Hesap",
+            accountNumber: targetAccount.hesapNo || "-",
+            balance: parseFloat(targetAccount.guncelBakiye) || 0,
+            currency: targetAccount.paraBirimi || "TRY",
+            labelColor: targetAccount.etiketRengi || "#ccc",
+            spendingLimit: targetAccount.harcamaLimiti || 0,
+            type: accountCategories.find((cat) => cat.categoryId === targetAccount.hesapKategoriId)?.type || "cash",
+            hesapKategoriId: targetAccount.hesapKategoriId || 1,
+            kullaniciId: currentUserId,
+          };
+          setUsers((prevUsers) => {
+            const userExists = prevUsers.some((u) => u.id === recipientUser.id);
+            if (!userExists) return [...prevUsers, recipientUser];
+            return prevUsers;
+          });
+          return { ...related, etkilenenHesapId: hesapId };
+        }
+      }
+
+      console.warn("fetchRelatedTransaction: etkilenenHesapId eksik, tüm hesaplar taranıyor", { hesapId, etkilenenHesapId, amount, islemTarihi });
+      const allAccountsResponse = await api.get(`${API_BASE_URL}/Hesap/hesap-get-all`);
+      const allAccounts = Array.isArray(allAccountsResponse.data) ? allAccountsResponse.data : [allAccountsResponse.data];
+
+      for (const account of allAccounts) {
+        if (account.id === hesapId) continue;
+        const response = await api.get(`${API_BASE_URL}/hesapHareket/hesapHareket-get-by-Id/${currentUserId}/${account.id}/${account.hesapKategoriId || fallbackHesapKategoriId || 1}`);
+        const transactions = Array.isArray(response.data) ? response.data : [];
+        const related = transactions.find((t) =>
+          t.etkilenenHesapId === hesapId &&
+          Math.abs(parseFloat(t.tutar) - amount) < 0.01 &&
+          dayjs(t.islemTarihi).isSame(dayjs(islemTarihi), "second") &&
+          t.islemTuruId === (isOutgoing ? 4 : 3)
+        );
+        if (related) {
+          const recipientUser = {
+            id: account.id,
+            userName: account.tanim || "Bilinmeyen Hesap",
+            accountNumber: account.hesapNo || "-",
+            balance: parseFloat(account.guncelBakiye) || 0,
+            currency: account.paraBirimi || "TRY",
+            labelColor: account.etiketRengi || "#ccc",
+            spendingLimit: account.harcamaLimiti || 0,
+            type: accountCategories.find((cat) => cat.categoryId === account.hesapKategoriId)?.type || "cash",
+            hesapKategoriId: account.hesapKategoriId || 1,
+            kullaniciId: currentUserId,
+          };
+          setUsers((prevUsers) => {
+            const userExists = prevUsers.some((u) => u.id === recipientUser.id);
+            if (!userExists) return [...prevUsers, recipientUser];
+            return prevUsers;
+          });
+          return { ...related, etkilenenHesapId: hesapId };
+        }
+      }
+
+      console.warn("fetchRelatedTransaction: Karşı işlem bulunamadı", { hesapId, etkilenenHesapId, amount, islemTarihi });
+      return null;
+    } catch (err) {
+      console.error("fetchRelatedTransaction error:", { message: err.message, response: err.response?.data, status: err.response?.status, url: err.config?.url });
+      setToast({ message: `Karşı işlem alınırken hata oluştu: ${err.message}`, color: "danger" });
+      return null;
+    }
+  };
+
+  const fetchTransactions = async (currentUserId = userId, hesapId, hesapKategoriId) => {
+    if (!currentUserId || !hesapId || !hesapKategoriId) {
+      setError("Geçersiz parametreler: userId, hesapId veya hesapKategoriId eksik.");
       return;
     }
     try {
-      const response = await api.get(
-        `${API_BASE_URL}/hesapHareket/hesapHareket-get-by-Id/${userId}/${hesapId}/${hesapKategoriId}`
-      );
+      const response = await api.get(`${API_BASE_URL}/hesapHareket/hesapHareket-get-by-Id/${currentUserId}/${hesapId}/${hesapKategoriId}`);
       console.log("API Response:", JSON.stringify(response.data, null, 2));
-      const fetchedTransactions = Array.isArray(response.data)
-        ? response.data
-        : [];
-      const formattedTransactions = await Promise.all(
-        fetchedTransactions.map(async (t) => {
-          let accountNumber = t.hesapId || "-";
-          let userName = selectedUser?.userName || "Bilinmeyen Kullanıcı";
+      const fetchedTransactions = Array.isArray(response.data) ? response.data : [];
+      const formattedTransactions = await Promise.all(fetchedTransactions.map(async (t) => {
+        let accountNumber = t.hesapId || "-";
+        let userName = selectedUser?.userName || "Bilinmeyen Kullanıcı";
 
-          if (t.islemTuruId === 3 || t.islemTuruId === 4) {
-            let targetHesapId = t.etkilenenHesapId;
-            let recipientUser = null;
+        if (t.islemTuruId === 3 || t.islemTuruId === 4) {
+          let targetHesapId = t.etkilenenHesapId;
+          let recipientUser = null;
 
-            if (targetHesapId) {
-              recipientUser = users.find((u) => u.id === targetHesapId);
-              if (!recipientUser) {
-                try {
-                  const recipientResponse = await api.get(
-                    `${API_BASE_URL}/Hesap/Hesap-get-by-Id/${targetHesapId}`
-                  );
-                  const data = recipientResponse.data;
-                  recipientUser = {
-                    id: data.id,
-                    userName: data.tanim || "Bilinmeyen Hesap",
-                    accountNumber: data.hesapNo || "-",
-                    balance: parseFloat(data.guncelBakiye) || 0,
-                    currency: data.paraBirimi || "TRY",
-                    labelColor: data.etiketRengi || "#ccc",
-                    spendingLimit: data.harcamaLimiti || 0,
-                    type:
-                      accountCategories.find(
-                        (cat) => cat.categoryId === data.hesapKategoriId
-                      )?.type || "cash",
-                    hesapKategoriId: data.hesapKategoriId || 1,
-                  };
-                  setUsers((prevUsers) => {
-                    const userExists = prevUsers.some(
-                      (u) => u.id === recipientUser.id
-                    );
-                    if (!userExists) {
-                      return [...prevUsers, recipientUser];
-                    }
-                    return prevUsers;
-                  });
-                } catch (err) {
-                  console.error("fetchTransactions: Karşı hesap alınamadı", {
-                    message: err.message,
-                    response: err.response?.data,
-                    status: err.response?.status,
-                    url: err.config?.url,
-                  });
-                  accountNumber = "-";
-                  userName = "Bilinmeyen Kullanıcı";
-                }
-              }
-              accountNumber = recipientUser?.accountNumber || "-";
-              userName = recipientUser?.userName || "Bilinmeyen Kullanıcı";
-            } else {
-              const relatedTransaction = await fetchRelatedTransaction(
-                t,
-                userId,
-                hesapKategoriId
-              );
-              if (relatedTransaction) {
-                targetHesapId = relatedTransaction.hesapId;
-                t.etkilenenHesapId = targetHesapId;
-                recipientUser = users.find((u) => u.id === targetHesapId);
-                if (!recipientUser) {
-                  const recipientResponse = await api.get(
-                    `${API_BASE_URL}/Hesap/Hesap-get-by-Id/${targetHesapId}`
-                  );
-                  const data = recipientResponse.data;
-                  recipientUser = {
-                    id: data.id,
-                    userName: data.tanim || "Bilinmeyen Hesap",
-                    accountNumber: data.hesapNo || "-",
-                    balance: parseFloat(data.guncelBakiye) || 0,
-                    currency: data.paraBirimi || "TRY",
-                    labelColor: data.etiketRengi || "#ccc",
-                    spendingLimit: data.harcamaLimiti || 0,
-                    type:
-                      accountCategories.find(
-                        (cat) => cat.categoryId === data.hesapKategoriId
-                      )?.type || "cash",
-                    hesapKategoriId: data.hesapKategoriId || 1,
-                  };
-                  setUsers((prevUsers) => {
-                    const userExists = prevUsers.some(
-                      (u) => u.id === recipientUser.id
-                    );
-                    if (!userExists) {
-                      return [...prevUsers, recipientUser];
-                    }
-                    return prevUsers;
-                  });
-                }
-                accountNumber = recipientUser.accountNumber || "-";
-                userName = recipientUser.userName || "Bilinmeyen Kullanıcı";
-              } else {
+          if (targetHesapId) {
+            recipientUser = users.find((u) => u.id === targetHesapId);
+            if (!recipientUser) {
+              try {
+                const recipientResponse = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-by-Id/${targetHesapId}`);
+                const data = recipientResponse.data;
+                recipientUser = {
+                  id: data.id,
+                  userName: data.tanim || "Bilinmeyen Hesap",
+                  accountNumber: data.hesapNo || "-",
+                  balance: parseFloat(data.guncelBakiye) || 0,
+                  currency: data.paraBirimi || "TRY",
+                  labelColor: data.etiketRengi || "#ccc",
+                  spendingLimit: data.harcamaLimiti || 0,
+                  type: accountCategories.find((cat) => cat.categoryId === data.hesapKategoriId)?.type || "cash",
+                  hesapKategoriId: data.hesapKategoriId || 1,
+                  kullaniciId: currentUserId,
+                };
+                setUsers((prevUsers) => {
+                  const userExists = prevUsers.some((u) => u.id === recipientUser.id);
+                  if (!userExists) return [...prevUsers, recipientUser];
+                  return prevUsers;
+                });
+              } catch (err) {
+                console.error("fetchTransactions: Karşı hesap alınamadı", { message: err.message, response: err.response?.data, status: err.response?.status, url: err.config?.url });
                 accountNumber = "-";
                 userName = "Bilinmeyen Kullanıcı";
               }
             }
+            accountNumber = recipientUser?.accountNumber || "-";
+            userName = recipientUser?.userName || "Bilinmeyen Kullanıcı";
           } else {
-            const currentUser = users.find((u) => u.id === t.hesapId);
-            accountNumber = currentUser?.accountNumber || "-";
-            userName = currentUser?.userName || "Bilinmeyen Kullanıcı";
+            const relatedTransaction = await fetchRelatedTransaction(t, currentUserId, hesapKategoriId);
+            if (relatedTransaction) {
+              targetHesapId = relatedTransaction.hesapId;
+              t.etkilenenHesapId = targetHesapId;
+              recipientUser = users.find((u) => u.id === targetHesapId);
+              if (!recipientUser) {
+                const recipientResponse = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-by-Id/${targetHesapId}`);
+                const data = recipientResponse.data;
+                recipientUser = {
+                  id: data.id,
+                  userName: data.tanim || "Bilinmeyen Hesap",
+                  accountNumber: data.hesapNo || "-",
+                  balance: parseFloat(data.guncelBakiye) || 0,
+                  currency: data.paraBirimi || "TRY",
+                  labelColor: data.etiketRengi || "#ccc",
+                  spendingLimit: data.harcamaLimiti || 0,
+                  type: accountCategories.find((cat) => cat.categoryId === data.hesapKategoriId)?.type || "cash",
+                  hesapKategoriId: data.hesapKategoriId || 1,
+                  kullaniciId: currentUserId,
+                };
+                setUsers((prevUsers) => {
+                  const userExists = prevUsers.some((u) => u.id === recipientUser.id);
+                  if (!userExists) return [...prevUsers, recipientUser];
+                  return prevUsers;
+                });
+              }
+              accountNumber = recipientUser.accountNumber || "-";
+              userName = recipientUser.userName || "Bilinmeyen Kullanıcı";
+            } else {
+              accountNumber = "-";
+              userName = "Bilinmeyen Kullanıcı";
+            }
           }
+        } else {
+          const currentUser = users.find((u) => u.id === t.hesapId);
+          accountNumber = currentUser?.accountNumber || "-";
+          userName = currentUser?.userName || "Bilinmeyen Kullanıcı";
+        }
 
-          return {
-            id: t.id,
-            date: t.islemTarihi
-              ? dayjs(t.islemTarihi).format("DD.MM.YYYY")
-              : "-",
-            type: transactionTypeMap[t.islemTuruId] || "Bilinmeyen İşlem",
-            userName,
-            accountNumber,
-            description: t.aciklama || "-",
-            debit: t.borc
-              ? `${t.borc.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`
-              : "-",
-            credit: t.alacak
-
-              ? `${t.alacak.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}`
-              : "-",
-            islemTarihi: t.islemTarihi,
-            islemTuruId: t.islemTuruId,
-            tutar: t.tutar || 0,
-            etkilenenHesapId: t.etkilenenHesapId,
-            hesapId: t.hesapId,
-          };
-        })
-      );
+        return {
+          id: t.id,
+          date: t.islemTarihi ? dayjs(t.islemTarihi).format("DD.MM.YYYY") : "-",
+          type: transactionTypeMap[t.islemTuruId] || "Bilinmeyen İşlem",
+          userName,
+          accountNumber,
+          description: t.aciklama || "-",
+          debit: t.borc ? `${t.borc.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}` : "-",
+          credit: t.alacak ? `${t.alacak.toLocaleString("tr-TR", { minimumFractionDigits: 2 })}` : "-",
+          islemTarihi: t.islemTarihi,
+          islemTuruId: t.islemTuruId,
+          tutar: t.tutar || 0,
+          etkilenenHesapId: t.etkilenenHesapId,
+          hesapId: t.hesapId,
+          kullaniciId: currentUserId,
+        };
+      }));
       setRawTransactions(formattedTransactions);
-      setTransactions(
-        formattedTransactions.filter((t) => t.hesapId === hesapId)
-      );
+      setTransactions(formattedTransactions.filter((t) => t.hesapId === hesapId));
     } catch (err) {
       console.error("fetchTransactions error:", err);
-      setToast({
-        message: `İşlemler yüklenirken hata oluştu: ${err.message}`,
-        color: "danger",
-      });
+      setToast({ message: `İşlemler yüklenirken hata oluştu: ${err.message}`, color: "danger" });
     }
   };
 
@@ -271,10 +344,7 @@ export const AccountsProvider = ({ children }) => {
         filtered = filtered.filter((t) => {
           if (!t.islemTarihi) return false;
           const transactionDate = dayjs(t.islemTarihi);
-          return (
-            transactionDate.isAfter(startDate) ||
-            transactionDate.isSame(startDate, "day")
-          );
+          return transactionDate.isAfter(startDate) || transactionDate.isSame(startDate, "day");
         });
       }
 
@@ -289,344 +359,175 @@ export const AccountsProvider = ({ children }) => {
         });
       }
 
-      filtered = filtered.sort((a, b) =>
-        dayjs(b.islemTarihi).isAfter(dayjs(a.islemTarihi)) ? 1 : -1
-      );
-
+      filtered = filtered.sort((a, b) => dayjs(b.islemTarihi).isAfter(dayjs(a.islemTarihi)) ? 1 : -1);
       setTransactions(filtered);
     } catch (error) {
       console.error("Filtreleme hatası:", error);
       setTransactions([]);
-      setToast({
-        message: "Filtreleme sırasında hata oluştu.",
-        color: "danger",
-      });
+      setToast({ message: "Filtreleme sırasında hata oluştu.", color: "danger" });
+    }
+  };
+
+  const calculateBalanceAdjustment = (currentBalance, transaction, amount, isDelete = false) => {
+    const isOutgoingTransfer = transaction.islemTuruId === 3;
+    const isIncomingTransfer = transaction.islemTuruId === 4;
+    let adjustment = 0;
+    if (transaction.islemTuruId === 1) {
+      adjustment = isDelete ? amount : -amount;
+    } else if (transaction.islemTuruId === 2) {
+      adjustment = isDelete ? -amount : amount;
+    } else if (isOutgoingTransfer) {
+      adjustment = isDelete ? -amount : amount;
+    } else if (isIncomingTransfer) {
+      adjustment = isDelete ? amount : -amount;
+    }
+    return currentBalance + adjustment;
+  };
+
+  const updateAccountBalance = async (accountId, newBalance, accountData) => {
+    const updatePayload = {
+      id: accountId,
+      tanim: accountData.tanim,
+      hesapNo: accountData.hesapNo,
+      guncelBakiye: newBalance,
+      paraBirimi: accountData.paraBirimi,
+      etiketRengi: accountData.etiketRengi,
+      harcamaLimiti: accountData.harcamaLimiti || 0,
+      guncellenmeTarihi: new Date().toISOString(),
+      hesapKategoriId: accountData.hesapKategoriId || 1,
+      durumu: accountData.durumu || 1,
+      aktif: accountData.aktif || 1,
+      eklenmeTarihi: accountData.eklenmeTarihi || new Date().toISOString(),
+      kullaniciId: userId,
+    };
+    await api.put(`${API_BASE_URL}/Hesap/hesap-update`, updatePayload);
+  };
+
+  const updateLocalStates = (updatedTransactions, newSenderBalance, newRecipientBalance, senderId, recipientId, transaction, relatedTransaction = null) => {
+    setRawTransactions(updatedTransactions);
+    setTransactions(updatedTransactions.filter((t) => t.hesapId === selectedUser?.id));
+
+    setUsers((prevUsers) =>
+      prevUsers.map((u) =>
+        u.id === senderId ? { ...u, balance: newSenderBalance, kullaniciId: userId } :
+        u.id === recipientId && newRecipientBalance !== null ? { ...u, balance: newRecipientBalance, kullaniciId: userId } : u
+      )
+    );
+
+    if (selectedUser?.id === senderId) {
+      setSelectedUser((prev) => ({ ...prev, balance: newSenderBalance, kullaniciId: userId }));
+    } else if (selectedUser?.id === recipientId && newRecipientBalance !== null) {
+      setSelectedUser((prev) => ({ ...prev, balance: newRecipientBalance, kullaniciId: userId }));
     }
   };
 
   const handleDeleteTransaction = async (transaction) => {
-    if (!transaction || !transaction.id || !transaction.hesapId) {
-      setToast({
-        message: "Geçersiz işlem veya hesap ID'si.",
-        color: "danger",
-      });
-      console.error(
-        "handleDeleteTransaction: Geçersiz transaction nesnesi",
-        transaction
-      );
+    if (!transaction?.id || !transaction.hesapId) {
+      setToast({ message: "Geçersiz işlem veya hesap ID'si.", color: "danger" });
+      console.error("handleDeleteTransaction: Geçersiz transaction nesnesi", transaction);
       return;
     }
 
+    const currentUserId = userId;
     const amount = parseFloat(transaction.tutar) || 0;
     const isOutgoingTransfer = transaction.islemTuruId === 3;
     const isIncomingTransfer = transaction.islemTuruId === 4;
     const isTransfer = isOutgoingTransfer || isIncomingTransfer;
 
     try {
-      const senderResponse = await api.get(
-        `${API_BASE_URL}/Hesap/Hesap-get-by-Id/${transaction.hesapId}`
-      );
+      const senderResponse = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-by-Id/${transaction.hesapId}`);
       let senderBalance = parseFloat(senderResponse.data.guncelBakiye) || 0;
+      let newSenderBalance = calculateBalanceAdjustment(senderBalance, transaction, amount, true);
 
-      let newSenderBalance = senderBalance;
-      if (transaction.islemTuruId === 1) {
-        newSenderBalance -= amount;
-      } else if (transaction.islemTuruId === 2) {
-        newSenderBalance += amount;
-      } else if (isOutgoingTransfer) {
-        newSenderBalance += amount;
-      } else if (isIncomingTransfer) {
-        newSenderBalance -= amount;
-      }
-
-      let recipientBalance = null;
       let newRecipientBalance = null;
       let relatedTransaction = null;
       let recipientAccount = null;
       if (isTransfer && transaction.etkilenenHesapId) {
-        relatedTransaction = await fetchRelatedTransaction(transaction, userId);
+        relatedTransaction = await fetchRelatedTransaction(transaction, currentUserId);
         if (!relatedTransaction) {
-          setToast({
-            message: "İlgili transfer işlemi bulunamadı.",
-            color: "danger",
-          });
-          console.warn(
-            "handleDeleteTransaction: Karşı işlem bulunamadı",
-            transaction.etkilenenHesapId
-          );
+          setToast({ message: "İlgili transfer işlemi bulunamadı.", color: "danger" });
+          console.warn("handleDeleteTransaction: Karşı işlem bulunamadı", transaction.etkilenenHesapId);
           return;
         }
 
-        const recipientResponse = await api.get(
-          `${API_BASE_URL}/Hesap/Hesap-get-by-Id/${transaction.etkilenenHesapId}`
-        );
+        const recipientResponse = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-by-Id/${transaction.etkilenenHesapId}`);
         recipientAccount = recipientResponse.data;
-        recipientBalance = parseFloat(recipientAccount.guncelBakiye) || 0;
-        newRecipientBalance = isOutgoingTransfer
-          ? recipientBalance - amount
-          : recipientBalance + amount;
+        let recipientBalance = parseFloat(recipientAccount.guncelBakiye) || 0;
+        newRecipientBalance = calculateBalanceAdjustment(recipientBalance, transaction, amount, true);
       }
 
       await api.delete(`${API_BASE_URL}/hesapHareket/hesapHareket-delete/${transaction.id}`);
-      if (relatedTransaction) {
-        await api.delete(`${API_BASE_URL}/hesapHareket/hesapHareket-delete/${relatedTransaction.id}`);
-      }
+      if (relatedTransaction) await api.delete(`${API_BASE_URL}/hesapHareket/hesapHareket-delete/${relatedTransaction.id}`);
 
-      await api.put(`${API_BASE_URL}/Hesap/hesap-update`, {
-        id: transaction.hesapId,
-        tanim: senderResponse.data.tanim,
-        hesapNo: senderResponse.data.hesapNo,
-        guncelBakiye: newSenderBalance,
-        paraBirimi: senderResponse.data.paraBirimi,
-        etiketRengi: senderResponse.data.etiketRengi,
-        harcamaLimiti: senderResponse.data.harcamaLimiti || 0,
-        guncellenmeTarihi: new Date().toISOString(),
-        hesapKategoriId: senderResponse.data.hesapKategoriId || 1,
-        durumu: senderResponse.data.durumu || 1,
-        aktif: senderResponse.data.aktif || 1,
-        eklenmeTarihi:
-          senderResponse.data.eklenmeTarihi || new Date().toISOString(),
-      });
+      await updateAccountBalance(transaction.hesapId, newSenderBalance, senderResponse.data);
+      if (isTransfer && recipientAccount) await updateAccountBalance(transaction.etkilenenHesapId, newRecipientBalance, recipientAccount);
 
-      if (isTransfer && recipientAccount) {
-        await api.put(`${API_BASE_URL}/Hesap/hesap-update`, {
-          id: transaction.etkilenenHesapId,
-          tanim: recipientAccount.tanim,
-          hesapNo: recipientAccount.hesapNo,
-          guncelBakiye: newRecipientBalance,
-          paraBirimi: recipientAccount.paraBirimi,
-          etiketRengi: recipientAccount.etiketRengi,
-          harcamaLimiti: recipientAccount.harcamaLimiti || 0,
-          guncellenmeTarihi: new Date().toISOString(),
-          hesapKategoriId: recipientAccount.hesapKategoriId || 1,
-          durumu: recipientAccount.durumu || 1,
-          aktif: recipientAccount.aktif || 1,
-          eklenmeTarihi:
-            recipientAccount.eklenmeTarihi || new Date().toISOString(),
-        });
-      }
+      const updatedTransactions = rawTransactions.filter((t) => t.id !== transaction.id && t.id !== (relatedTransaction?.id || null));
+      updateLocalStates(updatedTransactions, newSenderBalance, newRecipientBalance, transaction.hesapId, transaction.etkilenenHesapId, transaction, relatedTransaction);
 
-      const updatedTransactions = rawTransactions.filter(
-        (t) =>
-          t.id !== transaction.id && t.id !== (relatedTransaction?.id || null)
-      );
-      setRawTransactions(updatedTransactions);
-      setTransactions(
-        updatedTransactions.filter((t) => t.hesapId === selectedUser?.id)
-      );
-
-      setUsers((prevUsers) =>
-        prevUsers.map((u) =>
-          u.id === transaction.hesapId
-            ? { ...u, balance: newSenderBalance }
-            : u.id === transaction.etkilenenHesapId &&
-              newRecipientBalance !== null
-              ? { ...u, balance: newRecipientBalance }
-              : u
-        )
-      );
-
-      if (selectedUser?.id === transaction.hesapId) {
-        setSelectedUser((prev) => ({ ...prev, balance: newSenderBalance }));
-      } else if (
-        selectedUser?.id === transaction.etkilenenHesapId &&
-        newRecipientBalance !== null
-      ) {
-        setSelectedUser((prev) => ({ ...prev, balance: newRecipientBalance }));
-      }
-
-      await fetchTransactions(
-        userId,
-        selectedUser.id,
-        selectedUser.hesapKategoriId
-      );
-
-      setToast({
-        message: "İşlem başarıyla silindi.",
-        color: "success",
-      });
+      await fetchTransactions(currentUserId, selectedUser.id, selectedUser.hesapKategoriId);
+      setToast({ message: "İşlem başarıyla silindi.", color: "success" });
     } catch (err) {
-      console.error("handleDeleteTransaction error:", {
-        message: err.message,
-        response: err.response?.data,
-        status: err.response?.status,
-        url: err.config?.url,
-      });
-      setToast({
-        message: `İşlem silinirken hata oluştu: ${err.response?.data?.message || err.message}`,
-        color: "danger",
-      });
+      console.error("handleDeleteTransaction error:", { message: err.message, response: err.response?.data, status: err.response?.status, url: err.config?.url });
+      setToast({ message: `İşlem silinirken hata oluştu: ${err.response?.data?.message || err.message}`, color: "danger" });
     }
   };
 
   const confirmDeleteTransaction = async () => {
-    if (!transactionToDelete?.id || !transactionToDelete?.hesapId) {
-      setToast({
-        message: "İşlem ID'si veya hesap ID'si eksik.",
-        color: "danger",
-      });
+    if (!transactionToDelete?.id || !transactionToDelete.hesapId) {
+      setToast({ message: "İşlem ID'si veya hesap ID'si eksik.", color: "danger" });
       setShowDeleteTransactionModal(false);
       setTransactionToDelete(null);
       return;
     }
 
+    const currentUserId = userId;
+    const amount = parseFloat(transactionToDelete.tutar) || 0;
+    const isOutgoingTransfer = transactionToDelete.islemTuruId === 3;
+    const isIncomingTransfer = transactionToDelete.islemTuruId === 4;
+    const isTransfer = isOutgoingTransfer || isIncomingTransfer;
+
     try {
-      const amount = parseFloat(transactionToDelete.tutar) || 0;
-      const isOutgoingTransfer = transactionToDelete.islemTuruId === 3;
-      const isIncomingTransfer = transactionToDelete.islemTuruId === 4;
-      const isTransfer = isOutgoingTransfer || isIncomingTransfer;
-
-      const senderResponse = await api.get(
-        `${API_BASE_URL}/Hesap/Hesap-get-by-Id/${transactionToDelete.hesapId}`
-      );
+      const senderResponse = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-by-Id/${transactionToDelete.hesapId}`);
       let senderBalance = parseFloat(senderResponse.data.guncelBakiye) || 0;
+      let newSenderBalance = calculateBalanceAdjustment(senderBalance, transactionToDelete, amount, true);
 
-      let newSenderBalance = senderBalance;
-      if (transactionToDelete.islemTuruId === 1) {
-        newSenderBalance -= amount;
-      } else if (transactionToDelete.islemTuruId === 2) {
-        newSenderBalance += amount;
-      } else if (isOutgoingTransfer) {
-        newSenderBalance += amount;
-      } else if (isIncomingTransfer) {
-        newSenderBalance -= amount;
-      }
-
-      let recipientBalance = null;
       let newRecipientBalance = null;
       let relatedTransaction = null;
       let recipientAccount = null;
       if (isTransfer && transactionToDelete.etkilenenHesapId) {
-        relatedTransaction = await fetchRelatedTransaction(
-          transactionToDelete,
-          userId
-        );
+        relatedTransaction = await fetchRelatedTransaction(transactionToDelete, currentUserId);
         if (!relatedTransaction) {
-          setToast({
-            message: "İlgili transfer işlemi bulunamadı.",
-            color: "danger",
-          });
-          console.warn(
-            "confirmDeleteTransaction: Karşı işlem bulunamadı",
-            transactionToDelete.etkilenenHesapId
-          );
+          setToast({ message: "İlgili transfer işlemi bulunamadı.", color: "danger" });
+          console.warn("confirmDeleteTransaction: Karşı işlem bulunamadı", transactionToDelete.etkilenenHesapId);
           return;
         }
-
-        const recipientResponse = await api.get(
-          `${API_BASE_URL}/Hesap/Hesap-get-by-Id/${transactionToDelete.etkilenenHesapId}`
-        );
+        const recipientResponse = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-by-Id/${transactionToDelete.etkilenenHesapId}`);
         recipientAccount = recipientResponse.data;
-        recipientBalance = parseFloat(recipientAccount.guncelBakiye) || 0;
-        newRecipientBalance = isOutgoingTransfer
-          ? recipientBalance - amount
-          : recipientBalance + amount;
+        let recipientBalance = parseFloat(recipientAccount.guncelBakiye) || 0;
+        newRecipientBalance = calculateBalanceAdjustment(recipientBalance, transactionToDelete, amount, true);
       } else if (isTransfer && !transactionToDelete.etkilenenHesapId) {
-        setToast({
-          message: "Transfer işlemi için karşı hesap ID'si eksik.",
-          color: "danger",
-        });
-        console.warn(
-          "confirmDeleteTransaction: etkilenenHesapId eksik",
-          transactionToDelete
-        );
+        setToast({ message: "Transfer işlemi için karşı hesap ID'si eksik.", color: "danger" });
+        console.warn("confirmDeleteTransaction: etkilenenHesapId eksik", transactionToDelete);
         return;
       }
 
       await api.delete(`${API_BASE_URL}/hesapHareket/hesapHareket-delete/${transactionToDelete.id}`);
-      if (relatedTransaction) {
-        await api.delete(`${API_BASE_URL}/hesapHareket/hesapHareket-delete/${relatedTransaction.id}`);
-      }
+      if (relatedTransaction) await api.delete(`${API_BASE_URL}/hesapHareket/hesapHareket-delete/${relatedTransaction.id}`);
 
-      await api.put(`${API_BASE_URL}/Hesap/hesap-update`, {
-        id: transactionToDelete.hesapId,
-        tanim: senderResponse.data.tanim,
-        hesapNo: senderResponse.data.hesapNo,
-        guncelBakiye: newSenderBalance,
-        paraBirimi: senderResponse.data.paraBirimi,
-        etiketRengi: senderResponse.data.etiketRengi,
-        harcamaLimiti: senderResponse.data.harcamaLimiti || 0,
-        guncellenmeTarihi: new Date().toISOString(),
-        hesapKategoriId: senderResponse.data.hesapKategoriId || 1,
-        durumu: senderResponse.data.durumu || 1,
-        aktif: senderResponse.data.aktif || 1,
-        eklenmeTarihi:
-          senderResponse.data.eklenmeTarihi || new Date().toISOString(),
-      });
-
-      if (isTransfer && recipientAccount) {
-        await api.put(`${API_BASE_URL}/Hesap/hesap-update`, {
-          id: transactionToDelete.etkilenenHesapId,
-          tanim: recipientAccount.tanim,
-          hesapNo: recipientAccount.hesapNo,
-          guncelBakiye: newRecipientBalance,
-          paraBirimi: recipientAccount.paraBirimi,
-          etiketRengi: recipientAccount.etiketRengi,
-          harcamaLimiti: recipientAccount.harcamaLimiti || 0,
-          guncellenmeTarihi: new Date().toISOString(),
-          hesapKategoriId: recipientAccount.hesapKategoriId || 1,
-          durumu: recipientAccount.durumu || 1,
-          aktif: recipientAccount.aktif || 1,
-          eklenmeTarihi:
-            recipientAccount.eklenmeTarihi || new Date().toISOString(),
-        });
-      }
+      await updateAccountBalance(transactionToDelete.hesapId, newSenderBalance, senderResponse.data);
+      if (isTransfer && recipientAccount) await updateAccountBalance(transactionToDelete.etkilenenHesapId, newRecipientBalance, recipientAccount);
 
       const updatedTransactions = rawTransactions
-        .filter(
-          (t) =>
-            t.id !== transactionToDelete.id &&
-            t.id !== (relatedTransaction?.id || null)
-        )
-        .sort((a, b) =>
-          dayjs(b.islemTarihi).isAfter(dayjs(a.islemTarihi)) ? 1 : -1
-        );
-      setRawTransactions(updatedTransactions);
-      setTransactions(
-        updatedTransactions.filter((t) => t.hesapId === selectedUser?.id)
-      );
+        .filter((t) => t.id !== transactionToDelete.id && t.id !== (relatedTransaction?.id || null))
+        .sort((a, b) => dayjs(b.islemTarihi).isAfter(dayjs(a.islemTarihi)) ? 1 : -1);
+      updateLocalStates(updatedTransactions, newSenderBalance, newRecipientBalance, transactionToDelete.hesapId, transactionToDelete.etkilenenHesapId, transactionToDelete, relatedTransaction);
 
-      setUsers((prevUsers) =>
-        prevUsers.map((u) =>
-          u.id === transactionToDelete.hesapId
-            ? { ...u, balance: newSenderBalance }
-            : u.id === transactionToDelete.etkilenenHesapId &&
-              newRecipientBalance !== null
-              ? { ...u, balance: newRecipientBalance }
-              : u
-        )
-      );
-
-      if (selectedUser?.id === transactionToDelete.hesapId) {
-        setSelectedUser((prev) => ({ ...prev, balance: newSenderBalance }));
-      } else if (
-        selectedUser?.id === transactionToDelete.etkilenenHesapId &&
-        newRecipientBalance !== null
-      ) {
-        setSelectedUser((prev) => ({ ...prev, balance: newRecipientBalance }));
-      }
-
-      await fetchTransactions(
-        userId,
-        selectedUser.id,
-        selectedUser.hesapKategoriId
-      );
-
-      setToast({
-        message: "İşlem başarıyla silindi.",
-        color: "success",
-      });
+      await fetchTransactions(currentUserId, selectedUser.id, selectedUser.hesapKategoriId);
+      setToast({ message: "İşlem başarıyla silindi.", color: "success" });
     } catch (err) {
-      console.error("confirmDeleteTransaction error:", {
-        message: err.message,
-        response: err.response?.data,
-        status: err.response?.status,
-        url: err.config?.url,
-      });
-      setToast({
-        message: `İşlem silinirken hata oluştu: ${err.response?.data?.message || err.message}`,
-        color: "danger",
-      });
+      console.error("confirmDeleteTransaction error:", { message: err.message, response: err.response?.data, status: err.response?.status, url: err.config?.url });
+      setToast({ message: `İşlem silinirken hata oluştu: ${err.response?.data?.message || err.message}`, color: "danger" });
     } finally {
       setShowDeleteTransactionModal(false);
       setTransactionToDelete(null);
@@ -635,10 +536,7 @@ export const AccountsProvider = ({ children }) => {
 
   const handleCancelTransaction = (transaction) => {
     if (transaction.islemTuruId !== 3 && transaction.islemTuruId !== 4) {
-      setToast({
-        message: "Yalnızca transfer işlemleri iptal edilebilir.",
-        color: "warning",
-      });
+      setToast({ message: "Yalnızca transfer işlemleri iptal edilebilir.", color: "warning" });
       return;
     }
     setTransactionToCancel(transaction);
@@ -646,51 +544,29 @@ export const AccountsProvider = ({ children }) => {
   };
 
   const confirmCancelTransaction = async () => {
-    if (
-      !transactionToCancel ||
-      !transactionToCancel.id ||
-      !transactionToCancel.hesapId
-    ) {
-      setToast({
-        message: "Geçersiz işlem veya hesap ID'si.",
-        color: "danger",
-      });
-      console.error(
-        "confirmCancelTransaction: Geçersiz transactionToCancel nesnesi",
-        transactionToCancel
-      );
+    if (!transactionToCancel || !transactionToCancel.id || !transactionToCancel.hesapId) {
+      setToast({ message: "Geçersiz işlem veya hesap ID'si.", color: "danger" });
+      console.error("confirmCancelTransaction: Geçersiz transactionToCancel nesnesi", transactionToCancel);
       setShowCancelTransactionModal(false);
       setTransactionToCancel(null);
       return;
     }
 
-    if (
-      (transactionToCancel.islemTuruId !== 3 &&
-        transactionToCancel.islemTuruId !== 4) ||
-      !transactionToCancel.etkilenenHesapId
-    ) {
-      setToast({
-        message:
-          "Yalnızca geçerli transfer işlemleri iptal edilebilir. Karşı hesap ID'si eksik.",
-        color: "warning",
-      });
-      console.warn(
-        "confirmCancelTransaction: Desteklenmeyen işlem türü veya eksik etkilenenHesapId",
-        transactionToCancel
-      );
+    const currentUserId = userId;
+    if (transactionToCancel.islemTuruId !== 3 && transactionToCancel.islemTuruId !== 4 || !transactionToCancel.etkilenenHesapId) {
+      setToast({ message: "Yalnızca geçerli transfer işlemleri iptal edilebilir. Karşı hesap ID'si eksik.", color: "warning" });
+      console.warn("confirmCancelTransaction: Desteklenmeyen işlem türü veya eksik etkilenenHesapId", transactionToCancel);
       setShowCancelTransactionModal(false);
       setTransactionToCancel(null);
       return;
     }
 
     try {
-      const response = await api.get(
-        `${API_BASE_URL}/Hesap/Hesap-get-by-Id/${transactionToCancel.hesapId}`
-      );
+      const response = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-by-Id/${transactionToCancel.hesapId}`);
       let currentBalance = parseFloat(response.data.guncelBakiye) || 0;
       const amount = parseFloat(transactionToCancel.tutar) || 0;
 
-      let newBalance = currentBalance;
+      let newBalance = calculateBalanceAdjustment(currentBalance, transactionToCancel, amount, false);
       let affectedAccountBalance = null;
       let affectedAccountResponse = null;
       let relatedTransaction = null;
@@ -698,68 +574,32 @@ export const AccountsProvider = ({ children }) => {
       let reverseDescription;
 
       if (transactionToCancel.islemTuruId === 3) {
-        newBalance += amount;
         reverseTransactionTypeId = 4;
         reverseDescription = "Transfer Giriş (İptal)";
-        relatedTransaction = await fetchRelatedTransaction(
-          transactionToCancel,
-          userId
-        );
-        if (!relatedTransaction) {
-          setToast({
-            message: "İlgili transfer işlemi bulunamadı.",
-            color: "danger",
-          });
-          console.warn(
-            "confirmCancelTransaction: Karşı işlem bulunamadı",
-            transactionToCancel.etkilenenHesapId
-          );
-          setShowCancelTransactionModal(false);
-          setTransactionToCancel(null);
-          return;
-        }
-        affectedAccountResponse = await api.get(
-          `${API_BASE_URL}/Hesap/Hesap-get-by-Id/${transactionToCancel.etkilenenHesapId}`
-        );
-        affectedAccountBalance =
-          parseFloat(affectedAccountResponse.data.guncelBakiye) - amount;
-      } else if (transactionToCancel.islemTuruId === 4) {
-        newBalance -= amount;
+      } else {
         reverseTransactionTypeId = 3;
         reverseDescription = "Transfer Çıkış (İptal)";
-        relatedTransaction = await fetchRelatedTransaction(
-          transactionToCancel,
-          userId
-        );
-        if (!relatedTransaction) {
-          setToast({
-            message: "İlgili transfer işlemi bulunamadı.",
-            color: "danger",
-          });
-          console.warn(
-            "confirmCancelTransaction: Karşı işlem bulunamadı",
-            transactionToCancel.etkilenenHesapId
-          );
-          setShowCancelTransactionModal(false);
-          setTransactionToCancel(null);
-          return;
-        }
-        affectedAccountResponse = await api.get(
-          `${API_BASE_URL}/Hesap/Hesap-get-by-Id/${transactionToCancel.etkilenenHesapId}`
-        );
-        affectedAccountBalance =
-          parseFloat(affectedAccountResponse.data.guncelBakiye) + amount;
       }
+
+      relatedTransaction = await fetchRelatedTransaction(transactionToCancel, currentUserId);
+      if (!relatedTransaction) {
+        setToast({ message: "İlgili transfer işlemi bulunamadı.", color: "danger" });
+        console.warn("confirmCancelTransaction: Karşı işlem bulunamadı", transactionToCancel.etkilenenHesapId);
+        setShowCancelTransactionModal(false);
+        setTransactionToCancel(null);
+        return;
+      }
+
+      affectedAccountResponse = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-by-Id/${transactionToCancel.etkilenenHesapId}`);
+      let affectedBalance = parseFloat(affectedAccountResponse.data.guncelBakiye);
+      affectedAccountBalance = calculateBalanceAdjustment(affectedBalance, relatedTransaction, amount, false);
 
       const cancelTransactionObj = {
         id: 0,
-        kullanicilarId: userId,
+        kullanicilarId: currentUserId,
         hesapId: transactionToCancel.hesapId,
         etkilenenHesapId: transactionToCancel.etkilenenHesapId,
-        hesapKategoriId:
-          transactionToCancel.hesapKategoriId ||
-          response.data.hesapKategoriId ||
-          1,
+        hesapKategoriId: transactionToCancel.hesapKategoriId || response.data.hesapKategoriId || 1,
         islemTarihi: new Date().toISOString(),
         islemTuruId: reverseTransactionTypeId,
         durumu: 1,
@@ -775,21 +615,15 @@ export const AccountsProvider = ({ children }) => {
 
       const relatedCancelTransactionObj = {
         id: 0,
-        kullanicilarId: userId,
+        kullanicilarId: currentUserId,
         hesapId: relatedTransaction.hesapId,
         etkilenenHesapId: relatedTransaction.etkilenenHesapId,
-        hesapKategoriId:
-          relatedTransaction.hesapKategoriId ||
-          affectedAccountResponse.data.hesapKategoriId ||
-          1,
+        hesapKategoriId: relatedTransaction.hesapKategoriId || affectedAccountResponse.data.hesapKategoriId || 1,
         islemTarihi: new Date().toISOString(),
         islemTuruId: relatedTransaction.islemTuruId === 3 ? 4 : 3,
         durumu: 1,
         bilgi: `İptal: ${relatedTransaction.bilgi || relatedTransaction.aciklama || "İptal işlemi"}`,
-        aciklama:
-          relatedTransaction.islemTuruId === 3
-            ? "Transfer Giriş (İptal)"
-            : "Transfer Çıkış (İptal)",
+        aciklama: relatedTransaction.islemTuruId === 3 ? "Transfer Giriş (İptal)" : "Transfer Çıkış (İptal)",
         tutar: amount,
         borc: relatedTransaction.islemTuruId === 4 ? amount : 0,
         alacak: relatedTransaction.islemTuruId === 3 ? amount : 0,
@@ -801,39 +635,8 @@ export const AccountsProvider = ({ children }) => {
       await api.post(`${API_BASE_URL}/hesapHareket/hesapHareket-create`, cancelTransactionObj);
       await api.post(`${API_BASE_URL}/hesapHareket/hesapHareket-create`, relatedCancelTransactionObj);
 
-      await api.put(`${API_BASE_URL}/Hesap/hesap-update`, {
-        id: transactionToCancel.hesapId,
-        tanim: response.data.tanim,
-        hesapNo: response.data.hesapNo,
-        guncelBakiye: newBalance,
-        paraBirimi: response.data.paraBirimi,
-        etiketRengi: response.data.etiketRengi,
-        harcamaLimiti: response.data.harcamaLimiti || 0,
-        guncellenmeTarihi: new Date().toISOString(),
-        hesapKategoriId: response.data.hesapKategoriId || 1,
-        durumu: response.data.durumu || 1,
-        aktif: response.data.aktif || 1,
-        eklenmeTarihi: response.data.eklenmeTarihi || new Date().toISOString(),
-      });
-
-      if (affectedAccountResponse) {
-        await api.put(`${API_BASE_URL}/Hesap/hesap-update`, {
-          id: transactionToCancel.etkilenenHesapId,
-          tanim: affectedAccountResponse.data.tanim,
-          hesapNo: affectedAccountResponse.data.hesapNo,
-          guncelBakiye: affectedAccountBalance,
-          paraBirimi: affectedAccountResponse.data.paraBirimi,
-          etiketRengi: affectedAccountResponse.data.etiketRengi,
-          harcamaLimiti: affectedAccountResponse.data.harcamaLimiti || 0,
-          guncellenmeTarihi: new Date().toISOString(),
-          hesapKategoriId: affectedAccountResponse.data.hesapKategoriId || 1,
-          durumu: affectedAccountResponse.data.durumu || 1,
-          aktif: affectedAccountResponse.data.aktif || 1,
-          eklenmeTarihi:
-            affectedAccountResponse.data.eklenmeTarihi ||
-            new Date().toISOString(),
-        });
-      }
+      await updateAccountBalance(transactionToCancel.hesapId, newBalance, response.data);
+      if (affectedAccountResponse) await updateAccountBalance(transactionToCancel.etkilenenHesapId, affectedAccountBalance, affectedAccountResponse.data);
 
       const newTransaction = {
         id: Date.now(),
@@ -842,19 +645,14 @@ export const AccountsProvider = ({ children }) => {
         userName: response.data.tanim,
         accountNumber: response.data.hesapNo,
         description: cancelTransactionObj.bilgi,
-        debit:
-          reverseTransactionTypeId === 3
-            ? amount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })
-            : "-",
-        credit:
-          reverseTransactionTypeId === 4
-            ? amount.toLocaleString("tr-TR", { minimumFractionDigits: 2 })
-            : "-",
+        debit: reverseTransactionTypeId === 3 ? amount.toLocaleString("tr-TR", { minimumFractionDigits: 2 }) : "-",
+        credit: reverseTransactionTypeId === 4 ? amount.toLocaleString("tr-TR", { minimumFractionDigits: 2 }) : "-",
         islemTarihi: new Date().toISOString(),
         islemTuruId: reverseTransactionTypeId,
         tutar: amount,
         etkilenenHesapId: transactionToCancel.etkilenenHesapId,
         hesapId: transactionToCancel.hesapId,
+        kullaniciId: currentUserId,
       };
 
       const relatedNewTransaction = {
@@ -864,79 +662,24 @@ export const AccountsProvider = ({ children }) => {
         userName: affectedAccountResponse?.data.tanim || "Bilinmeyen Hesap",
         accountNumber: affectedAccountResponse?.data.hesapNo || "-",
         description: relatedCancelTransactionObj.bilgi,
-        debit: relatedCancelTransactionObj.borc
-          ? relatedCancelTransactionObj.borc.toLocaleString("tr-TR", {
-            minimumFractionDigits: 2,
-          })
-          : "-",
-        credit: relatedCancelTransactionObj.alacak
-          ? relatedCancelTransactionObj.alacak.toLocaleString("tr-TR", {
-            minimumFractionDigits: 2,
-          })
-          : "-",
+        debit: relatedCancelTransactionObj.borc ? relatedCancelTransactionObj.borc.toLocaleString("tr-TR", { minimumFractionDigits: 2 }) : "-",
+        credit: relatedCancelTransactionObj.alacak ? relatedCancelTransactionObj.alacak.toLocaleString("tr-TR", { minimumFractionDigits: 2 }) : "-",
         islemTarihi: new Date().toISOString(),
         islemTuruId: relatedCancelTransactionObj.islemTuruId,
         tutar: amount,
         etkilenenHesapId: transactionToCancel.hesapId,
         hesapId: transactionToCancel.etkilenenHesapId,
+        kullaniciId: currentUserId,
       };
 
-      const updatedTransactions = [
-        ...rawTransactions,
-        newTransaction,
-        relatedNewTransaction,
-      ].sort((a, b) =>
-        dayjs(b.islemTarihi).isAfter(dayjs(a.islemTarihi)) ? 1 : -1
-      );
-      setRawTransactions(updatedTransactions);
-      setTransactions(
-        updatedTransactions.filter((t) => t.hesapId === selectedUser?.id)
-      );
+      const updatedTransactions = [...rawTransactions, newTransaction, relatedNewTransaction].sort((a, b) => dayjs(b.islemTarihi).isAfter(dayjs(a.islemTarihi)) ? 1 : -1);
+      updateLocalStates(updatedTransactions, newBalance, affectedAccountBalance, transactionToCancel.hesapId, transactionToCancel.etkilenenHesapId, transactionToCancel);
 
-      setUsers((prevUsers) =>
-        prevUsers.map((u) =>
-          u.id === transactionToCancel.hesapId
-            ? { ...u, balance: newBalance }
-            : u.id === transactionToCancel.etkilenenHesapId &&
-              affectedAccountBalance !== null
-              ? { ...u, balance: affectedAccountBalance }
-              : u
-        )
-      );
-
-      if (selectedUser?.id === transactionToCancel.hesapId) {
-        setSelectedUser((prev) => ({ ...prev, balance: newBalance }));
-      } else if (
-        selectedUser?.id === transactionToCancel.etkilenenHesapId &&
-        affectedAccountBalance !== null
-      ) {
-        setSelectedUser((prev) => ({
-          ...prev,
-          balance: affectedAccountBalance,
-        }));
-      }
-
-      await fetchTransactions(
-        userId,
-        selectedUser.id,
-        selectedUser.hesapKategoriId
-      );
-
-      setToast({
-        message: "Transfer işlemi başarıyla iptal edildi.",
-        color: "success",
-      });
+      await fetchTransactions(currentUserId, selectedUser.id, selectedUser.hesapKategoriId);
+      setToast({ message: "Transfer işlemi başarıyla iptal edildi.", color: "success" });
     } catch (err) {
-      console.error("confirmCancelTransaction error:", {
-        message: err.message,
-        response: err.response?.data,
-        status: err.response?.status,
-        url: err.config?.url,
-      });
-      setToast({
-        message: `İşlem iptal edilirken hata oluştu: ${err.response?.data?.message || err.message}`,
-        color: "danger",
-      });
+      console.error("confirmCancelTransaction error:", { message: err.message, response: err.response?.data, status: err.response?.status, url: err.config?.url });
+      setToast({ message: `İşlem iptal edilirken hata oluştu: ${err.response?.data?.message || err.message}`, color: "danger" });
     } finally {
       setShowCancelTransactionModal(false);
       setTransactionToCancel(null);
@@ -945,190 +688,134 @@ export const AccountsProvider = ({ children }) => {
 
   const handleEditTransaction = async (transaction) => {
     if (!transaction || !transaction.id || !transaction.hesapId) {
-      setToast({
-        message: "Geçersiz işlem veya hesap ID'si. İşlem verisi eksik.",
-        color: "danger",
-      });
-      console.error(
-        "handleEditTransaction: Geçersiz transaction nesnesi",
-        transaction
-      );
+      setToast({ message: "Geçersiz işlem veya hesap ID'si. İşlem verisi eksik.", color: "danger" });
+      console.error("handleEditTransaction: Geçersiz transaction nesnesi", transaction);
       return;
     }
 
+    const currentUserId = userId;
     setEditingTransaction(transaction);
     setIsSubmitting(false);
 
     const amount = parseFloat(transaction.tutar) || 0;
     if (amount <= 0) {
-      setToast({
-        message: "Geçersiz tutar. Tutar sıfır veya negatif olamaz.",
-        color: "danger",
-      });
+      setToast({ message: "Geçersiz tutar. Tutar sıfır veya negatif olamaz.", color: "danger" });
       console.warn("handleEditTransaction: Geçersiz tutar", transaction.tutar);
       return;
     }
-    const formattedAmount = amount.toLocaleString("tr-TR", {
-      minimumFractionDigits: 2,
-    });
+    const formattedAmount = amount.toLocaleString("tr-TR", { minimumFractionDigits: 2 });
 
-    const debit =
-      transaction.islemTuruId === 2 || transaction.islemTuruId === 3
-        ? amount
-        : 0;
-    const credit =
-      transaction.islemTuruId === 1 || transaction.islemTuruId === 4
-        ? amount
-        : 0;
+    const debit = transaction.islemTuruId === 2 || transaction.islemTuruId === 3 ? amount : 0;
+    const credit = transaction.islemTuruId === 1 || transaction.islemTuruId === 4 ? amount : 0;
 
     let recipientAccount = "";
     let recipientUser = null;
 
     if (transaction.islemTuruId === 3 || transaction.islemTuruId === 4) {
-      let targetHesapId = transaction.etkilenenHesapId;
+        let targetHesapId = transaction.etkilenenHesapId;
 
-      if (!targetHesapId) {
-        const relatedTransaction = await fetchRelatedTransaction(
-          transaction,
-          userId,
-          selectedUser?.hesapKategoriId
-        );
-        if (relatedTransaction) {
-          targetHesapId = relatedTransaction.hesapId;
-          transaction.etkilenenHesapId = targetHesapId;
-          setEditingTransaction({
-            ...transaction,
-            etkilenenHesapId: targetHesapId,
-          });
-        } else {
-          setToast({
-            message:
-              "İlgili transfer işlemi bulunamadı. Lütfen işlemi kontrol edin.",
-            color: "danger",
-          });
-          console.warn(
-            "handleEditTransaction: Karşı işlem bulunamadı",
-            transaction
-          );
-          return;
+        if (!targetHesapId) {
+          const relatedTransaction = await fetchRelatedTransaction(transaction, currentUserId, selectedUser?.hesapKategoriId);
+          if (relatedTransaction) {
+            targetHesapId = relatedTransaction.hesapId;
+            transaction.etkilenenHesapId = targetHesapId;
+            setEditingTransaction({ ...transaction, etkilenenHesapId: targetHesapId });
+          } else {
+            setToast({ message: "İlgili transfer işlemi bulunamadı. Lütfen işlemi kontrol edin.", color: "danger" });
+            console.warn("handleEditTransaction: Karşı işlem bulunamadı", transaction);
+            return;
+          }
         }
+
+        recipientUser = users.find((u) => u.id === targetHesapId);
+        if (!recipientUser) {
+          try {
+            const response = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-by-Id/${targetHesapId}`);
+            const data = response.data;
+            recipientUser = {
+              id: data.id,
+              userName: data.tanim || "Bilinmeyen Hesap",
+              accountNumber: data.hesapNo || "-",
+              balance: parseFloat(data.guncelBakiye) || 0,
+              currency: data.paraBirimi || "TRY",
+              labelColor: data.etiketRengi || "#ccc",
+              spendingLimit: data.harcamaLimiti || 0,
+              type: accountCategories.find((cat) => cat.categoryId === data.hesapKategoriId)?.type || "cash",
+              hesapKategoriId: data.hesapKategoriId || 1,
+              kullaniciId: currentUserId,
+            };
+            setUsers((prevUsers) => {
+              const userExists = prevUsers.some((u) => u.id === recipientUser.id);
+              if (!userExists) return [...prevUsers, recipientUser];
+              return prevUsers;
+            });
+          } catch (err) {
+            console.error("handleEditTransaction: Karşı hesap alınamadı", { message: err.message, response: err.response?.data, status: err.response?.status, url: err.config?.url });
+            setToast({ message: `Karşı hesap alınamadı: ${err.response?.data?.message || err.message}`, color: "danger" });
+            return;
+          }
+        }
+        recipientAccount = recipientUser.accountNumber || "-";
+      } else {
+        recipientAccount = users.find((u) => u.id === transaction.hesapId)?.accountNumber || "-";
       }
 
-      recipientUser = users.find((u) => u.id === targetHesapId);
-      if (!recipientUser) {
-        try {
-          const response = await api.get(
-            `${API_BASE_URL}/Hesap/Hesap-get-by-Id/${targetHesapId}`
-          );
-          const data = response.data;
-          recipientUser = {
-            id: data.id,
-            userName: data.tanim || "Bilinmeyen Hesap",
-            accountNumber: data.hesapNo || "-",
-            balance: parseFloat(data.guncelBakiye) || 0,
-            currency: data.paraBirimi || "TRY",
-            labelColor: data.etiketRengi || "#ccc",
-            spendingLimit: data.harcamaLimiti || 0,
-            type:
-              accountCategories.find(
-                (cat) => cat.categoryId === data.hesapKategoriId
-              )?.type || "cash",
-            hesapKategoriId: data.hesapKategoriId || 1,
-          };
-          setUsers((prevUsers) => {
-            const userExists = prevUsers.some((u) => u.id === recipientUser.id);
-            if (!userExists) {
-              return [...prevUsers, recipientUser];
-            }
-            return prevUsers;
-          });
-        } catch (err) {
-          console.error("handleEditTransaction: Karşı hesap alınamadı", {
-            message: err.message,
-            response: err.response?.data,
-            status: err.response?.status,
-            url: err.config?.url,
-          });
-          setToast({
-            message: `Karşı hesap alınamadı: ${err.response?.data?.message || err.message}`,
-            color: "danger",
-          });
-          return;
-        }
-      }
-      recipientAccount = recipientUser.accountNumber || "-";
-    } else {
-      recipientAccount =
-        users.find((u) => u.id === transaction.hesapId)?.accountNumber || "-";
-    }
-
-    setTransactionForm({
-      rawAmount: amount.toString(),
-      formattedAmount,
-      description: transaction.bilgi || transaction.aciklama || "",
-      date: transaction.islemTarihi
-        ? dayjs(transaction.islemTarihi).format("DD.MM.YYYY")
-        : dayjs().format("DD.MM.YYYY"),
-      recipientAccount,
-      submissionTimestamp: null,
-    });
-
-    setValue(
-      transaction.islemTarihi ? dayjs(transaction.islemTarihi) : dayjs()
-    );
-
-    if (transaction.islemTuruId === 1) {
-      setTransactionType("in");
-      setTransactionModalVisible(true);
-      setVisibleTransferModal(false);
-    } else if (transaction.islemTuruId === 2) {
-      setTransactionType("out");
-      setTransactionModalVisible(true);
-      setVisibleTransferModal(false);
-    } else if (transaction.islemTuruId === 3) {
-      setTransferDirection("outgoing");
-      setVisibleTransferModal(true);
-      setTransactionModalVisible(false);
-    } else if (transaction.islemTuruId === 4) {
-      setTransferDirection("incoming");
-      setVisibleTransferModal(true);
-      setTransactionModalVisible(false);
-    } else {
-      setToast({
-        message:
-          "Desteklenmeyen işlem türü. Yalnızca para girişi, çıkışı veya transfer işlemleri düzenlenebilir.",
-        color: "danger",
+      setTransactionForm({
+        rawAmount: amount.toString(),
+        formattedAmount,
+        description: transaction.bilgi || transaction.aciklama || "",
+        date: transaction.islemTarihi ? dayjs(transaction.islemTarihi).format("DD.MM.YYYY") : dayjs().format("DD.MM.YYYY"),
+        recipientAccount,
+        submissionTimestamp: null,
+        kullaniciId: currentUserId,
       });
-      console.error(
-        "handleEditTransaction: Desteklenmeyen işlem türü",
-        transaction.islemTuruId
-      );
-      return;
-    }
 
-    console.log("handleEditTransaction: İşlem hazırlandı", {
-      transactionId: transaction.id,
-      tutar: amount,
-      debit,
-      credit,
-      recipientAccount,
-      islemTuruId: transaction.islemTuruId,
-      etkilenenHesapId: transaction.etkilenenHesapId,
-      recipientUser,
-    });
+      setValue(transaction.islemTarihi ? dayjs(transaction.islemTarihi) : dayjs());
+
+      if (transaction.islemTuruId === 1) {
+        setTransactionType("in");
+        setTransactionModalVisible(true);
+        setVisibleTransferModal(false);
+      } else if (transaction.islemTuruId === 2) {
+        setTransactionType("out");
+        setTransactionModalVisible(true);
+        setVisibleTransferModal(false);
+      } else if (transaction.islemTuruId === 3) {
+        setTransferDirection("outgoing");
+        setVisibleTransferModal(true);
+        setTransactionModalVisible(false);
+      } else if (transaction.islemTuruId === 4) {
+        setTransferDirection("incoming");
+        setVisibleTransferModal(true);
+        setTransactionModalVisible(false);
+      } else {
+        setToast({ message: "Desteklenmeyen işlem türü. Yalnızca para girişi, çıkışı veya transfer işlemleri düzenlenebilir.", color: "danger" });
+        console.error("handleEditTransaction: Desteklenmeyen işlem türü", transaction.islemTuruId);
+        return;
+      }
+
+      console.log("handleEditTransaction: İşlem hazırlandı", {
+        transactionId: transaction.id,
+        tutar: amount,
+        debit,
+        credit,
+        recipientAccount,
+        islemTuruId: transaction.islemTuruId,
+        etkilenenHesapId: transaction.etkilenenHesapId,
+        recipientUser,
+        kullaniciId: currentUserId,
+      });
   };
 
   const createTransactionObject = async (e) => {
     e.preventDefault();
     if (isSubmitting) return;
     if (!selectedUser) {
-      setToast({
-        message: "Lütfen önce bir kullanıcı seçin.",
-        color: "danger",
-      });
+      setToast({ message: "Lütfen önce bir kullanıcı seçin.", color: "danger" });
       return;
     }
 
+    const currentUserId = userId;
     setIsSubmitting(true);
     const submissionTimestamp = Date.now();
     if (processedSubmissions.current.has(submissionTimestamp)) return;
@@ -1136,60 +823,38 @@ export const AccountsProvider = ({ children }) => {
     try {
       const amount = parseFloat(transactionForm.rawAmount);
       if (isNaN(amount) || amount <= 0) {
-        setToast({
-          message: "Lütfen geçerli bir tutar girin.",
-          color: "danger",
-        });
+        setToast({ message: "Lütfen geçerli bir tutar girin.", color: "danger" });
         return;
       }
 
       let sender, recipient;
       if (transferDirection === "outgoing") {
         sender = selectedUser;
-        recipient = users.find(
-          (u) => u.accountNumber === transactionForm.recipientAccount
-        );
+        recipient = users.find((u) => u.accountNumber === transactionForm.recipientAccount);
       } else {
-        sender = users.find(
-          (u) => u.accountNumber === transactionForm.recipientAccount
-        );
+        sender = users.find((u) => u.accountNumber === transactionForm.recipientAccount);
         recipient = selectedUser;
       }
 
       if (!sender || !recipient) {
-        setToast({
-          message: "Gönderen veya alıcı hesap bulunamadı.",
-          color: "danger",
-        });
+        setToast({ message: "Gönderen veya alıcı hesap bulunamadı.", color: "danger" });
         return;
       }
 
       if (sender.accountNumber === recipient.accountNumber) {
-        setToast({
-          message: "Aynı hesaba transfer yapılamaz.",
-          color: "danger",
-        });
+        setToast({ message: "Aynı hesaba transfer yapılamaz.", color: "danger" });
         return;
       }
 
       if (sender.currency !== recipient.currency) {
-        setToast({
-          message: "Hesaplar farklı para birimlerinde, transfer yapılamaz.",
-          color: "danger",
-        });
+        setToast({ message: "Hesaplar farklı para birimlerinde, transfer yapılamaz.", color: "danger" });
         return;
       }
 
-      const accountSenderResponse = await api.get(
-        `${API_BASE_URL}/Hesap/Hesap-get-by-Id/${sender.id}`
-      );
-      const accountRecipientResponse = await api.get(
-        `${API_BASE_URL}/Hesap/Hesap-get-by-Id/${recipient.id}`
-      );
-      let senderBalance =
-        parseFloat(accountSenderResponse.data.guncelBakiye) || 0;
-      let recipientBalance =
-        parseFloat(accountRecipientResponse.data.guncelBakiye) || 0;
+      const accountSenderResponse = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-by-Id/${etkilenenHesapId}`);
+      const accountRecipientResponse = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-by-Id/${etkilenenHesapId}`);
+      let senderBalance = parseFloat(accountSenderResponse.data.guncelBakiye) || 0;
+      let recipientBalance = parseFloat(accountRecipientResponse.data.guncelBakiye) || 0;
 
       let oldAmount = 0;
       let senderTransactionToRemove = null;
@@ -1199,12 +864,8 @@ export const AccountsProvider = ({ children }) => {
         oldAmount = parseFloat(editingTransaction.tutar) || 0;
         const isOutgoing = editingTransaction.islemTuruId === 3;
 
-        const senderTransactions = await api.get(
-          `${API_BASE_URL}/hesapHareket/hesapHareket-get-by-Id/${userId}/${sender.id}/${sender.hesapKategoriId}`
-        );
-        senderTransactionToRemove = senderTransactions.data.find(
-          (t) => t.id === editingTransaction.id
-        );
+        const senderTransactions = await api.get(`${API_BASE_URL}/hesapHareket/hesapHareket-get-by-Id/${currentUserId}/${sender.id}/${sender.hesapKategoriId}`);
+        senderTransactionToRemove = senderTransactions.data.find((t) => t.id === editingTransaction.id);
 
         if (senderTransactionToRemove) {
           if (isOutgoing) {
@@ -1215,23 +876,13 @@ export const AccountsProvider = ({ children }) => {
             recipientBalance += oldAmount;
           }
 
-          recipientTransactionToRemove = await fetchRelatedTransaction(
-            editingTransaction,
-            userId,
-            sender.hesapKategoriId
-          );
+          recipientTransactionToRemove = await fetchRelatedTransaction(editingTransaction, currentUserId, sender.hesapKategoriId);
           if (!recipientTransactionToRemove) {
-            setToast({
-              message: "İlgili alıcı işlemi bulunamadı.",
-              color: "danger",
-            });
+            setToast({ message: "İlgili alıcı işlemi bulunamadı.", color: "danger" });
             return;
           }
         } else {
-          setToast({
-            message: "Düzenlenecek işlem bulunamadı.",
-            color: "danger",
-          });
+          setToast({ message: "Düzenlenecek işlem bulunamadı.", color: "danger" });
           return;
         }
       }
@@ -1246,7 +897,7 @@ export const AccountsProvider = ({ children }) => {
 
       const senderTransactionObj = {
         id: editingTransaction ? editingTransaction.id : 0,
-        kullanicilarId: userId,
+        kullanicilarId: currentUserId,
         hesapId: sender.id,
         etkilenenHesapId: recipient.id,
         hesapKategoriId: sender.hesapKategoriId || 1,
@@ -1259,15 +910,13 @@ export const AccountsProvider = ({ children }) => {
         alacak: 0,
         tutar: amount,
         bakiye: newSenderBalance,
-        eklenmeTarihi: editingTransaction
-          ? editingTransaction.eklenmeTarihi
-          : new Date().toISOString(),
+        eklenmeTarihi: editingTransaction ? editingTransaction.eklenmeTarihi : new Date().toISOString(),
         guncellenmeTarihi: new Date().toISOString(),
       };
 
       const recipientTransactionObj = {
         id: recipientTransactionToRemove ? recipientTransactionToRemove.id : 0,
-        kullanicilarId: userId,
+        kullanicilarId: currentUserId,
         hesapId: recipient.id,
         etkilenenHesapId: sender.id,
         hesapKategoriId: recipient.hesapKategoriId || 1,
@@ -1280,13 +929,10 @@ export const AccountsProvider = ({ children }) => {
         alacak: amount,
         tutar: amount,
         bakiye: newRecipientBalance,
-        eklenmeTarihi: recipientTransactionToRemove
-          ? recipientTransactionToRemove.eklenmeTarihi
-          : new Date().toISOString(),
+        eklenmeTarihi: recipientTransactionToRemove ? recipientTransactionToRemove.eklenmeTarihi : new Date().toISOString(),
         guncellenmeTarihi: new Date().toISOString(),
       };
 
-      // API çağrıları
       const senderResponse = editingTransaction
         ? await api.put(`${API_BASE_URL}/hesapHareket/hesapHareket-update`, senderTransactionObj)
         : await api.post(`${API_BASE_URL}/hesapHareket/hesapHareket-create`, senderTransactionObj);
@@ -1294,41 +940,9 @@ export const AccountsProvider = ({ children }) => {
         ? await api.put(`${API_BASE_URL}/hesapHareket/hesapHareket-update`, recipientTransactionObj)
         : await api.post(`${API_BASE_URL}/hesapHareket/hesapHareket-create`, recipientTransactionObj);
 
-      // Hesap bakiyelerini güncelle
-      await api.put(`${API_BASE_URL}/Hesap/hesap-update`, {
-        id: sender.id,
-        tanim: sender.userName,
-        hesapNo: sender.accountNumber,
-        guncelBakiye: newSenderBalance,
-        paraBirimi: sender.currency,
-        etiketRengi: sender.labelColor,
-        harcamaLimiti: sender.spendingLimit || 0,
-        guncellenmeTarihi: new Date().toISOString(),
-        hesapKategoriId: sender.hesapKategoriId || 1,
-        durumu: 1,
-        aktif: 1,
-        eklenmeTarihi:
-          accountSenderResponse.data.eklenmeTarihi || new Date().toISOString(),
-      });
+      await updateAccountBalance(sender.id, newSenderBalance, accountSenderResponse.data);
+      await updateAccountBalance(recipient.id, newRecipientBalance, accountRecipientResponse.data);
 
-      await api.put(`${API_BASE_URL}/Hesap/hesap-update`, {
-        id: recipient.id,
-        tanim: recipient.userName,
-        hesapNo: recipient.accountNumber,
-        guncelBakiye: newRecipientBalance,
-        paraBirimi: recipient.currency,
-        etiketRengi: recipient.labelColor,
-        harcamaLimiti: recipient.spendingLimit || 0,
-        guncellenmeTarihi: new Date().toISOString(),
-        hesapKategoriId: recipient.hesapKategoriId || 1,
-        durumu: 1,
-        aktif: 1,
-        eklenmeTarihi:
-          accountRecipientResponse.data.eklenmeTarihi ||
-          new Date().toISOString(),
-      });
-
-      // Yerel state'i güncelle
       const senderTransaction = {
         id: senderResponse.data.id || Date.now(),
         date: dayjs(transactionForm.date).format("DD.MM.YYYY"),
@@ -1343,6 +957,7 @@ export const AccountsProvider = ({ children }) => {
         tutar: amount,
         etkilenenHesapId: recipient.id,
         hesapId: sender.id,
+        kullaniciId: currentUserId,
       };
 
       const recipientTransaction = {
@@ -1359,61 +974,38 @@ export const AccountsProvider = ({ children }) => {
         tutar: amount,
         etkilenenHesapId: sender.id,
         hesapId: recipient.id,
+        kullaniciId: currentUserId,
       };
 
-      // Hem gönderici hem de alıcı için işlem geçmişini güncelle
       setRawTransactions((prev) => {
-        let updated = prev.filter(
-          (t) =>
-            t.id !== senderTransactionObj.id &&
-            t.id !== recipientTransactionObj.id
-        );
+        let updated = prev.filter((t) => t.id !== senderTransactionObj.id && t.id !== recipientTransactionObj.id);
         updated.push(senderTransaction, recipientTransaction);
-        return updated.sort((a, b) =>
-          dayjs(b.islemTarihi).isAfter(dayjs(a.islemTarihi)) ? 1 : -1
-        );
+        return updated.sort((a, b) => dayjs(b.islemTarihi).isAfter(dayjs(a.islemTarihi)) ? 1 : -1);
       });
 
-      // Seçili kullanıcının işlem geçmişini güncelle
       if (sender.id === selectedUser.id) {
-        setSelectedUser({ ...sender, balance: newSenderBalance });
+        setSelectedUser({ ...sender, balance: newSenderBalance, kullaniciId: currentUserId });
         setTransactions((prev) =>
-          prev
-            .filter((t) => t.id !== senderTransactionObj.id)
-            .concat(senderTransaction)
-            .sort((a, b) =>
-              dayjs(b.islemTarihi).isAfter(dayjs(a.islemTarihi)) ? 1 : -1
-            )
+          prev.filter((t) => t.id !== senderTransactionObj.id).concat(senderTransaction).sort((a, b) => dayjs(b.islemTarihi).isAfter(dayjs(a.islemTarihi)) ? 1 : -1)
         );
       } else if (recipient.id === selectedUser.id) {
-        setSelectedUser({ ...recipient, balance: newRecipientBalance });
+        setSelectedUser({ ...recipient, balance: newRecipientBalance, kullaniciId: currentUserId });
         setTransactions((prev) =>
-          prev
-            .filter((t) => t.id !== recipientTransactionObj.id)
-            .concat(recipientTransaction)
-            .sort((a, b) =>
-              dayjs(b.islemTarihi).isAfter(dayjs(a.islemTarihi)) ? 1 : -1
-            )
+          prev.filter((t) => t.id !== recipientTransactionObj.id).concat(recipientTransaction).sort((a, b) => dayjs(b.islemTarihi).isAfter(dayjs(a.islemTarihi)) ? 1 : -1)
         );
       }
 
-      // Alıcı hesabın işlem geçmişini de güncelle
-      await fetchTransactions(userId, recipient.id, recipient.hesapKategoriId);
+      await fetchTransactions(currentUserId, recipient.id, recipient.hesapKategoriId);
 
       setUsers((prevUsers) =>
         prevUsers.map((u) =>
-          u.id === sender.id
-            ? { ...u, balance: newSenderBalance }
-            : u.id === recipient.id
-              ? { ...u, balance: newRecipientBalance }
-              : u
+          u.id === sender.id ? { ...u, balance: newSenderBalance, kullaniciId: currentUserId } :
+          u.id === recipient.id ? { ...u, balance: newRecipientBalance, kullaniciId: currentUserId } : u
         )
       );
 
       setToast({
-        message: editingTransaction
-          ? "Transfer işlemi başarıyla güncellendi."
-          : "Transfer işlemi başarıyla gerçekleştirildi.",
+        message: editingTransaction ? "Transfer işlemi başarıyla güncellendi." : "Transfer işlemi başarıyla gerçekleştirildi.",
         color: "success",
       });
       setVisibleTransferModal(false);
@@ -1425,28 +1017,27 @@ export const AccountsProvider = ({ children }) => {
         date: dayjs().format("DD.MM.YYYY"),
         recipientAccount: "",
         submissionTimestamp: null,
+        kullaniciId: currentUserId,
       });
     } catch (err) {
       console.error("Transfer güncelleme hatası:", err.response || err);
-      setToast({
-        message: `Transfer güncellenirken hata oluştu: ${err.response?.data?.message || err.message}`,
-        color: "danger",
-      });
+      setToast({ message: `Transfer güncellenirken hata oluştu: ${err.response?.data?.message || err.message}`, color: "danger" });
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const fetchAccount = async () => {
-    if (!userId) {
+    const currentUserId = userId;
+    if (!currentUserId) {
       setError("Kullanıcı ID bulunamadı.");
       return;
     }
     setLoading(true);
     try {
-      const contextUser = users.find((u) => u.id === userId);
+      const contextUser = users.find((u) => u.id === currentUserId);
       if (contextUser) {
-        setSelectedUser({ ...contextUser });
+        setSelectedUser({ ...contextUser, kullaniciId: currentUserId });
         setFormData({
           userName: contextUser.userName || "",
           accountNumber: contextUser.accountNumber || "",
@@ -1456,6 +1047,7 @@ export const AccountsProvider = ({ children }) => {
           spendingLimit: contextUser.spendingLimit || "",
           type: contextUser.type || "cash",
           description: contextUser.description || "",
+          kullaniciId: currentUserId,
         });
         setAccountData({
           id: contextUser.id,
@@ -1466,13 +1058,10 @@ export const AccountsProvider = ({ children }) => {
           etiketRengi: contextUser.labelColor,
           harcamaLimiti: contextUser.spendingLimit,
           hesapKategoriId: contextUser.hesapKategoriId || 1,
+          kullaniciId: currentUserId,
         });
         if (contextUser.id && contextUser.hesapKategoriId) {
-          await fetchTransactions(
-            userId,
-            contextUser.id,
-            contextUser.hesapKategoriId
-          );
+          await fetchTransactions(currentUserId, contextUser.id, contextUser.hesapKategoriId);
         } else {
           setError("Hesap ID veya kategori ID eksik.");
         }
@@ -1480,7 +1069,7 @@ export const AccountsProvider = ({ children }) => {
         setLoading(false);
         return;
       }
-      const response = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-by-Id/${userId}`);
+      const response = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-by-Id/${currentUserId}`);
       const data = response.data;
       const formattedUser = {
         id: data.id,
@@ -1490,11 +1079,9 @@ export const AccountsProvider = ({ children }) => {
         currency: data.paraBirimi || "TRY",
         labelColor: data.etiketRengi || "#ccc",
         spendingLimit: data.harcamaLimiti || 0,
-        type:
-          accountCategories.find(
-            (cat) => cat.categoryId === data.hesapKategoriId
-          )?.type || "cash",
+        type: accountCategories.find((cat) => cat.categoryId === data.hesapKategoriId)?.type || "cash",
         hesapKategoriId: data.hesapKategoriId || 1,
+        kullaniciId: currentUserId,
       };
       setSelectedUser({ ...formattedUser });
       setFormData({
@@ -1506,33 +1093,30 @@ export const AccountsProvider = ({ children }) => {
         spendingLimit: data.harcamaLimiti || "",
         type: formattedUser.type,
         description: data.description || "",
+        kullaniciId: currentUserId,
       });
-      setAccountData({ ...data });
+      setAccountData({ ...data, kullaniciId: currentUserId });
       setUsers((prevUsers) => {
         const userExists = prevUsers.some((u) => u.id === data.id);
-        if (!userExists && formattedUser.userName) {
-          return [...prevUsers, formattedUser];
-        }
+        if (!userExists && formattedUser.userName) return [...prevUsers, formattedUser];
         return prevUsers;
       });
 
       if (data.id && data.hesapKategoriId) {
-        await fetchTransactions(userId, data.id, data.hesapKategoriId);
+        await fetchTransactions(currentUserId, data.id, data.hesapKategoriId);
       } else {
         setError("Hesap ID veya kategori ID eksik.");
       }
       setError(null);
     } catch (err) {
-      setError(
-        "Hesap bilgileri alınamadı: " +
-        (err.response?.data?.message || err.message)
-      );
+      setError("Hesap bilgileri alınamadı: " + (err.response?.data?.message || err.message));
     } finally {
       setLoading(false);
     }
   };
 
   const createAccount = async (newAccountData) => {
+    const currentUserId = getUserId();
     try {
       const payload = {
         tanim: newAccountData.userName,
@@ -1541,10 +1125,8 @@ export const AccountsProvider = ({ children }) => {
         paraBirimi: newAccountData.currency,
         etiketRengi: newAccountData.labelColor,
         harcamaLimiti: newAccountData.spendingLimit || 0,
-        hesapKategoriId:
-          accountCategories.find((cat) => cat.type === newAccountData.type)
-            ?.categoryId || 2,
-        kullanicilarId: userId,
+        hesapKategoriId: accountCategories.find((cat) => cat.type === newAccountData.type)?.categoryId || 2,
+        kullanicilarId: currentUserId,
         eklenmeTarihi: new Date().toISOString(),
         guncellenmeTarihi: new Date().toISOString(),
         durumu: 1,
@@ -1564,13 +1146,11 @@ export const AccountsProvider = ({ children }) => {
         spendingLimit: createdAccount.harcamaLimiti,
         type: newAccountData.type,
         hesapKategoriId: createdAccount.hesapKategoriId,
+        kullaniciId: currentUserId,
       };
       setUsers((prevUsers) => [...prevUsers, formattedAccount]);
     } catch (err) {
-      throw new Error(
-        "Hesap oluşturma başarısız: " +
-        (err.response?.data?.message || err.message)
-      );
+      throw new Error("Hesap oluşturma başarısız: " + (err.response?.data?.message || err.message));
     }
   };
 
@@ -1584,6 +1164,7 @@ export const AccountsProvider = ({ children }) => {
         date: dayjs().format("DD.MM.YYYY"),
         recipientAccount: "",
         submissionTimestamp: null,
+        kullaniciId: userId,
       });
       setEditingTransaction(null);
       processedSubmissions.current.clear();
@@ -1601,6 +1182,7 @@ export const AccountsProvider = ({ children }) => {
         spendingLimit: selectedUser.spendingLimit || "",
         type: selectedUser.type || "cash",
         description: selectedUser.description || "",
+        kullaniciId: userId,
       });
     }
   }, [modalVisible, selectedUser]);
@@ -1615,134 +1197,6 @@ export const AccountsProvider = ({ children }) => {
     }
     applyFilters();
   }, [filterPeriod, searchQuery, rawTransactions, accounts]);
-
-  const fetchRelatedTransaction = async (
-    transaction,
-    userId,
-    fallbackHesapKategoriId = null
-  ) => {
-    try {
-      const { hesapId, etkilenenHesapId, tutar, islemTarihi, islemTuruId } =
-        transaction;
-      const amount = parseFloat(tutar) || 0;
-      const isOutgoing = islemTuruId === 3;
-
-      if (etkilenenHesapId) {
-        const targetAccountResponse = await api.get(
-          `${API_BASE_URL}/Hesap/Hesap-get-by-Id/${etkilenenHesapId}`
-        );
-        const targetAccount = targetAccountResponse.data;
-        const response = await api.get(
-          `${API_BASE_URL}/hesapHareket/hesapHareket-get-by-Id/${userId}/${etkilenenHesapId}/${targetAccount.hesapKategoriId || fallbackHesapKategoriId || 1}`
-        );
-        const transactions = Array.isArray(response.data) ? response.data : [];
-        const related = transactions.find(
-          (t) =>
-            t.etkilenenHesapId === hesapId &&
-            Math.abs(parseFloat(t.tutar) - amount) < 0.01 &&
-            dayjs(t.islemTarihi).isSame(dayjs(islemTarihi), "second") &&
-            t.islemTuruId === (isOutgoing ? 4 : 3)
-        );
-        if (related) {
-          const recipientUser = {
-            id: targetAccount.id,
-            userName: targetAccount.tanim || "Bilinmeyen Hesap",
-            accountNumber: targetAccount.hesapNo || "-",
-            balance: parseFloat(targetAccount.guncelBakiye) || 0,
-            currency: targetAccount.paraBirimi || "TRY",
-            labelColor: targetAccount.etiketRengi || "#ccc",
-            spendingLimit: targetAccount.harcamaLimiti || 0,
-            type:
-              accountCategories.find(
-                (cat) => cat.categoryId === targetAccount.hesapKategoriId
-              )?.type || "cash",
-            hesapKategoriId: targetAccount.hesapKategoriId || 1,
-          };
-          setUsers((prevUsers) => {
-            const userExists = prevUsers.some((u) => u.id === recipientUser.id);
-            if (!userExists) {
-              return [...prevUsers, recipientUser];
-            }
-            return prevUsers;
-          });
-          return { ...related, etkilenenHesapId: hesapId };
-        }
-      }
-
-      console.warn(
-        "fetchRelatedTransaction: etkilenenHesapId eksik, tüm hesaplar taranıyor",
-        {
-          hesapId,
-          etkilenenHesapId,
-          amount,
-          islemTarihi,
-        }
-      );
-      const allAccountsResponse = await api.get(`${API_BASE_URL}/Hesap/hesap-get-all`);
-      const allAccounts = Array.isArray(allAccountsResponse.data)
-        ? allAccountsResponse.data
-        : [allAccountsResponse.data];
-
-      for (const account of allAccounts) {
-        if (account.id === hesapId) continue;
-        const response = await api.get(
-          `${API_BASE_URL}/hesapHareket/hesapHareket-get-by-Id/${userId}/${account.id}/${account.hesapKategoriId || fallbackHesapKategoriId || 1}`
-        );
-        const transactions = Array.isArray(response.data) ? response.data : [];
-        const related = transactions.find(
-          (t) =>
-            t.etkilenenHesapId === hesapId &&
-            Math.abs(parseFloat(t.tutar) - amount) < 0.01 &&
-            dayjs(t.islemTarihi).isSame(dayjs(islemTarihi), "second") &&
-            t.islemTuruId === (isOutgoing ? 4 : 3)
-        );
-        if (related) {
-          const recipientUser = {
-            id: account.id,
-            userName: account.tanim || "Bilinmeyen Hesap",
-            accountNumber: account.hesapNo || "-",
-            balance: parseFloat(account.guncelBakiye) || 0,
-            currency: account.paraBirimi || "TRY",
-            labelColor: account.etiketRengi || "#ccc",
-            spendingLimit: account.harcamaLimiti || 0,
-            type:
-              accountCategories.find(
-                (cat) => cat.categoryId === account.hesapKategoriId
-              )?.type || "cash",
-            hesapKategoriId: account.hesapKategoriId || 1,
-          };
-          setUsers((prevUsers) => {
-            const userExists = prevUsers.some((u) => u.id === recipientUser.id);
-            if (!userExists) {
-              return [...prevUsers, recipientUser];
-            }
-            return prevUsers;
-          });
-          return { ...related, etkilenenHesapId: hesapId };
-        }
-      }
-
-      console.warn("fetchRelatedTransaction: Karşı işlem bulunamadı", {
-        hesapId,
-        etkilenenHesapId,
-        amount,
-        islemTarihi,
-      });
-      return null;
-    } catch (err) {
-      console.error("fetchRelatedTransaction error:", {
-        message: err.message,
-        response: err.response?.data,
-        status: err.response?.status,
-        url: err.config?.url,
-      });
-      setToast({
-        message: `Karşı işlem alınırken hata oluştu: ${err.message}`,
-        color: "danger",
-      });
-      return null;
-    }
-  };
 
   const contextValue = {
     accounts,

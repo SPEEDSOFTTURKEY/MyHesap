@@ -26,7 +26,7 @@ import { useNavigate } from "react-router-dom";
 import CIcon from "@coreui/icons-react";
 import { cilPlus, cilPencil } from "@coreui/icons";
 import api from "../../../api/api";
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 // CoreUI renk paleti (alt kategoriler için)
 const coreuiColors = [

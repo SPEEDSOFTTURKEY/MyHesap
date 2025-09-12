@@ -10,12 +10,11 @@ import {
 } from "@coreui/react";
 import PurchasesContext from "../../../context/PurchasesContext";
 import PurchasesHeader from "../../../components/purchases/PurchasesHeader";
-import PurchasesTable from "../../../components/purchases/PurchasesTable";
 import PurchasesCard from "../../../components/purchases/PurchasesCard";
 import SupplierModal from "../../../components/purchases/SupplierModal";
 import api from "../../../api/api";
 import ErrorBoundary from "../products/ErrorBoundary";
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 const Purchases = () => {
   const [toasts, setToasts] = useState([]);
@@ -34,6 +33,17 @@ const Purchases = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // Kullanıcı ID'sini al (NewExpense'deki gibi)
+  const getUserId = () => {
+    try {
+      const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+      return user.id;
+    } catch (err) {
+      console.error("Kullanıcı ID'si alınırken hata:", err);
+      return 0;
+    }
+  };
+
   const addToast = (message, type = "success") => {
     const toast = (
       <CToast key={Date.now()} autohide={true} visible={true} delay={5000}>
@@ -51,9 +61,10 @@ const Purchases = () => {
   const fetchPurchases = async () => {
     setLoading(true);
     try {
-      console.log("metod:fetchPurcahes");
+      console.log("metod:fetchPurchases");
       const { data } = await api.get(
         `${API_BASE_URL}/alis/alis-get-all`,
+        { headers: { accept: "*/*" } }
       );
       console.log(
         "Fetched Purchases (Full Data):",
@@ -85,7 +96,7 @@ const Purchases = () => {
   const fetchSuppliers = async () => {
     try {
       const { data } = await api.get(
-       `${API_BASE_URL}/tedarikci/tedarikci-get-all`,
+        `${API_BASE_URL}/tedarikci/tedarikci-get-all`,
         { headers: { accept: "*/*" } },
       );
       setSuppliers(data.filter((item) => item.durumu === 1));
@@ -96,9 +107,16 @@ const Purchases = () => {
   };
 
   const handleCancelPurchase = async (purchaseId) => {
+    const userId = getUserId();
+    if (!userId) {
+      addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "error");
+      return;
+    }
+
     try {
       await api.delete(
-        `${API_BASE_URL}/alis/alis-delete/${purchaseId}`,
+        `${API_BASE_URL}/alis/alis-delete/${purchaseId}/${userId}`,
+        { headers: { accept: "*/*" } }
       );
       addToast("Alış başarıyla iptal edildi.", "success");
       fetchPurchases();

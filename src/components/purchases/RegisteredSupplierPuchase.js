@@ -47,11 +47,22 @@ import ErrorBoundary from "../../views/pages/products/ErrorBoundary";
 import { jsPDF } from "jspdf";
 import dayjs from "dayjs";
 
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 const api = axios.create({
   baseURL: API_BASE_URL,
 });
+
+// Kullanıcı ID'sini al
+const getUserId = () => {
+  try {
+    const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+    return user.id;
+  } catch (err) {
+    console.error("Kullanıcı ID'si alınırken hata:", err);
+    return 0;
+  }
+};
 
 const RegisteredSupplierPurchase = () => {
   const { state } = useLocation();
@@ -62,6 +73,9 @@ const RegisteredSupplierPurchase = () => {
   const suppliers = state?.suppliers || [];
   const purchaseId = state?.purchaseId || null;
   const supplierIdFromState = state?.supplierId || supplier?.id || null;
+  
+  // Kullanıcı ID'sini getUserId fonksiyonu ile al
+  const currentUserId = getUserId();
 
   const [toasts, setToasts] = useState([]);
   const [mode, setMode] = useState(
@@ -77,6 +91,7 @@ const RegisteredSupplierPurchase = () => {
     masrafAltKategoriId: null,
     urunTipi: "urun",
     paraBirimi: "TRY",
+    kullaniciId: currentUserId, 
   });
   const [products, setProducts] = useState([]);
   const [selectedProducts, setSelectedProducts] = useState([]);
@@ -94,6 +109,7 @@ const RegisteredSupplierPurchase = () => {
     kdv: 20,
     indirim: 0,
     aciklamaUrun: "",
+    kullaniciId: currentUserId, // Her ürün için de kullanıcı ID'si
   });
   const toaster = useRef();
   const itemLabel = formData.urunTipi === "urun" ? "Ürün" : "Hizmet";
@@ -113,8 +129,9 @@ const RegisteredSupplierPurchase = () => {
     setFormData((prev) => ({
       ...prev,
       tedarikciId: Number(supplierIdFromState),
+      kullaniciId: currentUserId, // Kullanıcı ID'si güncellendi
     }));
-  }, [supplierIdFromState, navigate]);
+  }, [supplierIdFromState, navigate, currentUserId]);
 
   const addToast = (message, type = "success") => {
     const toast = (
@@ -164,7 +181,7 @@ const RegisteredSupplierPurchase = () => {
               miktar: item.miktar || 0,
               depoId: item.depoId || null,
               fiyat: item.fiyat || 0,
-              paraBirimi: item.paraBirimi || "TRY", // NULL KORUMA
+              paraBirimi: item.paraBirimi || "TRY",
               kdv: productData.alisKDV || 20,
               indirim: item.indirim || 0,
               aciklamaUrun: item.aciklamaUrun || "",
@@ -172,6 +189,7 @@ const RegisteredSupplierPurchase = () => {
               toplam: Number(toplam),
               urunKategoriId: productData.urunKategoriId || "-",
               urunTipi: productData.urunTipi,
+              kullaniciId: currentUserId, // Her ürün için kullanıcı ID'si
             };
           })
           .filter((p) => p !== null);
@@ -204,7 +222,7 @@ const RegisteredSupplierPurchase = () => {
           miktar: data.miktar || 0,
           depoId: data.depoId || null,
           fiyat: data.fiyat || 0,
-          paraBirimi: data.paraBirimi || "TRY", // NULL KORUMA
+          paraBirimi: data.paraBirimi || "TRY",
           kdv: productData.alisKDV || 20,
           indirim: data.indirim || 0,
           aciklamaUrun: data.aciklamaUrun || "",
@@ -212,11 +230,12 @@ const RegisteredSupplierPurchase = () => {
           toplam: Number(toplam),
           urunKategoriId: productData.urunKategoriId || "-",
           urunTipi: productData.urunTipi,
+          kullaniciId: currentUserId, // Kullanıcı ID'si eklendi
         };
 
         setSelectedProducts([selectedProduct]);
       }
-      console.log(setSelectedProducts);
+      
       setFormData({
         tedarikciId: data.tedarikciId || Number(supplierIdFromState),
         belgeNo: data.belgeNo || "",
@@ -226,7 +245,8 @@ const RegisteredSupplierPurchase = () => {
         masrafAnaKategoriId: data.masrafAnaKategoriId || null,
         masrafAltKategoriId: data.masrafAltKategoriId || null,
         urunTipi: data.urunTipi ? "urun" : "hizmet",
-        paraBirimi: data.paraBirimi || "TRY", // NULL KORUMA
+        paraBirimi: data.paraBirimi || "TRY",
+        kullaniciId: currentUserId, // Kullanıcı ID'si eklendi
       });
       setMode("view");
     } catch (err) {
@@ -293,7 +313,7 @@ const RegisteredSupplierPurchase = () => {
     fetchProducts();
     fetchWarehouses();
     fetchMainCategories();
-  }, [purchaseId, navigate]);
+  }, [purchaseId, navigate, currentUserId]);
 
   useEffect(() => {
     if (formData.masrafAnaKategoriId) {
@@ -316,7 +336,11 @@ const RegisteredSupplierPurchase = () => {
 
   const handleProductFormChange = (e) => {
     const { name, value } = e.target;
-    setProductForm((prev) => ({ ...prev, [name]: value }));
+    setProductForm((prev) => ({ 
+      ...prev, 
+      [name]: value,
+      kullaniciId: currentUserId // Her değişiklikte kullanıcı ID'sini koru
+    }));
   };
 
   const handleProductSelect = (product) => {
@@ -325,10 +349,11 @@ const RegisteredSupplierPurchase = () => {
       miktar: 1,
       depoId: "",
       fiyat: product.alisFiyat || 0,
-      paraBirimi: product.paraBirimi || "TRY", // DEFAULT DEĞER
+      paraBirimi: product.paraBirimi || "TRY",
       kdv: product.alisKDV || 20,
       indirim: 0,
       aciklamaUrun: "",
+      kullaniciId: currentUserId, // Kullanıcı ID'si eklendi
     });
     setEditingProductIndex(null);
     setShowProductModal(true);
@@ -342,10 +367,11 @@ const RegisteredSupplierPurchase = () => {
       miktar: product.miktar,
       depoId: product.depoId || "",
       fiyat: product.fiyat,
-      paraBirimi: product.paraBirimi || "TRY", // NULL KORUMA
+      paraBirimi: product.paraBirimi || "TRY",
       kdv: product.kdv,
       indirim: product.indirim,
       aciklamaUrun: product.aciklamaUrun,
+      kullaniciId: currentUserId, // Kullanıcı ID'si eklendi
     });
     setEditingProductIndex(index);
     setShowProductModal(true);
@@ -385,7 +411,7 @@ const RegisteredSupplierPurchase = () => {
       miktar: Number(productForm.miktar) || 0,
       depoId: productForm.depoId || null,
       fiyat: Number(productForm.fiyat) || 0,
-      paraBirimi: productForm.paraBirimi || "TRY", // NULL KORUMA
+      paraBirimi: productForm.paraBirimi || "TRY",
       kdv: Number(productForm.kdv) || 1,
       indirim: Number(productForm.indirim) || 0,
       aciklamaUrun: productForm.aciklamaUrun || "",
@@ -393,6 +419,7 @@ const RegisteredSupplierPurchase = () => {
       toplam: Number(toplam),
       urunKategoriId: selectedProduct.urunKategoriId || "-",
       urunTipi: selectedProduct.urunTipi,
+      kullaniciId: currentUserId, // Kullanıcı ID'si eklendi
     };
 
     if (editingProductIndex !== null) {
@@ -412,10 +439,11 @@ const RegisteredSupplierPurchase = () => {
       miktar: 1,
       depoId: "",
       fiyat: 0,
-      paraBirimi: "TRY", // DEFAULT DEĞER
+      paraBirimi: "TRY",
       kdv: 20,
       indirim: 0,
       aciklamaUrun: "",
+      kullaniciId: currentUserId, // Reset için kullanıcı ID'si
     });
     setSelectedProduct(null);
     setEditingProductIndex(null);
@@ -470,6 +498,8 @@ const RegisteredSupplierPurchase = () => {
   const handleSubmit = async () => {
     try {
       const effectiveTedarikciId = Number(formData.tedarikciId);
+      const effectiveKullaniciId = Number(formData.kullaniciId);
+      
       if (!effectiveTedarikciId || isNaN(effectiveTedarikciId)) {
         console.error("Invalid tedarikciId", {
           formData,
@@ -477,6 +507,12 @@ const RegisteredSupplierPurchase = () => {
           state,
         });
         addToast("Tedarikçi seçimi zorunludur.", "error");
+        return;
+      }
+
+      if (!effectiveKullaniciId || isNaN(effectiveKullaniciId)) {
+        console.error("Invalid kullaniciId", { formData, currentUserId });
+        addToast("Kullanıcı bilgisi eksik.", "error");
         return;
       }
 
@@ -508,7 +544,7 @@ const RegisteredSupplierPurchase = () => {
         ...new Set(
           selectedProducts
             .map((p) => p.paraBirimi)
-            .filter((currency) => currency && currency.trim() !== ""), // null/undefined/boş string kontrolü
+            .filter((currency) => currency && currency.trim() !== ""),
         ),
       ];
 
@@ -517,13 +553,13 @@ const RegisteredSupplierPurchase = () => {
         mainCurrency = "TRY";
       } else if (productCurrencies.length === 1) {
         // Tek para birimi varsa onu kullan
-        mainCurrency = productCurrencies[0] || "TRY"; // Ekstra güvenlik
+        mainCurrency = productCurrencies[0] || "TRY";
       }
 
       // Son güvenlik kontrolü
       mainCurrency = mainCurrency || "TRY";
 
-      // Çoklu ürün için veri yapısı
+      // Çoklu ürün için veri yapısı - Kullanıcı ID'si eklendi
       const purchaseData = {
         id: mode === "edit" ? Number(purchaseId) : 0,
         tedarikciId: effectiveTedarikciId,
@@ -540,8 +576,9 @@ const RegisteredSupplierPurchase = () => {
         eklenmeTarihi: mode === "edit" ? undefined : new Date().toISOString(),
         guncellenmeTarihi: new Date().toISOString(),
         urunTipi: formData.urunTipi === "urun" ? true : false,
-        paraBirimi: mainCurrency, // GÜVENLİ ANA PARA BİRİMİ
-        // Çoklu ürün dizisi - KDV eklendi
+        paraBirimi: mainCurrency,
+        kullaniciId: effectiveKullaniciId, // ANA KULLANICI ID'Sİ EKLENDİ
+        // Çoklu ürün dizisi - KDV ve kullanıcı ID'si eklendi
         urunler: selectedProducts.map((product) => ({
           urunId: Number(product.urunId),
           depoId: product.depoId ? Number(product.depoId) : null,
@@ -550,7 +587,8 @@ const RegisteredSupplierPurchase = () => {
           indirim: Number(product.indirim) || 0,
           kdv: Number(product.kdv) || 20,
           aciklamaUrun: product.aciklamaUrun || null,
-          paraBirimi: product.paraBirimi || "TRY", // HER ÜRÜN İÇİN NULL KORUMA
+          paraBirimi: product.paraBirimi || "TRY",
+          kullaniciId: currentUserId, // HER ÜRÜN İÇİN KULLANICI ID'Sİ
         })),
       };
 
@@ -564,19 +602,20 @@ const RegisteredSupplierPurchase = () => {
         purchaseData.indirim = Number(product.indirim) || 0;
         purchaseData.kdv = Number(product.kdv) || 20;
         purchaseData.aciklamaUrun = product.aciklamaUrun || null;
-        purchaseData.paraBirimi = product.paraBirimi || "TRY"; // TEK ÜRÜN İÇİN NULL KORUMA
+        purchaseData.paraBirimi = product.paraBirimi || "TRY";
+        purchaseData.kullaniciId = currentUserId; // TEK ÜRÜN İÇİN KULLANICI ID'Sİ
         // urunler dizisini kaldır
         delete purchaseData.urunler;
       }
 
-      console.log("Gönderilen veri:", purchaseData); // Debug için
+      console.log("Gönderilen veri (kullaniciId dahil):", purchaseData);
 
       let response;
       if (mode === "edit") {
-        console.log(purchaseData);
+        console.log("Güncelleme isteği:", purchaseData);
         response = await api.put(`${API_BASE_URL}/alis/alis-update`, purchaseData);
       } else {
-        console.log(purchaseData);
+        console.log("Kayıt isteği:", purchaseData);
         response = await api.post(`${API_BASE_URL}/alis/alis-create`, purchaseData);
       }
 
@@ -608,7 +647,8 @@ const RegisteredSupplierPurchase = () => {
 
   const handleCancelPurchase = async () => {
     try {
-      await api.delete(`${API_BASE_URL}/alis/alis-delete/${purchaseId}`);
+      // DELETE endpoint'ine de kullanıcı ID'si gönder
+      await api.delete(`${API_BASE_URL}/alis/alis-delete/${purchaseId}/${currentUserId}`);
       addToast("Alış başarıyla iptal edildi.", "success");
       navigate("/app/purchases");
     } catch (err) {
@@ -646,6 +686,12 @@ const RegisteredSupplierPurchase = () => {
     doc.text(`Açıklama: ${formData.aciklamaAlis || "-"}`, 10, y);
     y += 10;
     doc.text(`Tür: ${formData.urunTipi === "urun" ? "Ürün" : "Hizmet"}`, 10, y);
+    y += 10;
+    doc.text(
+      `Kullanıcı ID: ${formData.kullaniciId || "-"}`, // Kullanıcı bilgisi eklendi
+      10,
+      y,
+    );
     y += 10;
     doc.text(
       `Masraf Ana Kategori: ${mainCategories.find((c) => c.id === formData.masrafAnaKategoriId)?.adi || "-"}`,
@@ -730,8 +776,10 @@ const RegisteredSupplierPurchase = () => {
   const handleEdit = () => {
     setMode("edit");
   };
+  
   const totals = calculateTotals();
   const filteredProducts = products;
+  
   return (
     <ErrorBoundary>
       <CToaster ref={toaster} placement="top-end" className="p-3">
@@ -966,6 +1014,13 @@ const RegisteredSupplierPurchase = () => {
                     </CFormSelect>
                   )}
                 </CCol>
+                {/* Debug için - production'da kaldırın */}
+                {process.env.NODE_ENV === 'development' && (
+                  <CCol xs={12}>
+                    <CFormLabel className="text-muted small">Debug - Kullanıcı ID</CFormLabel>
+                    <p className="text-muted small">{formData.kullaniciId}</p>
+                  </CCol>
+                )}
               </CRow>
             </CCardBody>
           </CCard>
@@ -1295,6 +1350,15 @@ const RegisteredSupplierPurchase = () => {
                 />
               </CCol>
             </CRow>
+            {/* Debug için - production'da kaldırın */}
+            {process.env.NODE_ENV === 'development' && (
+              <CRow>
+                <CCol>
+                  <CFormLabel className="text-muted small">Debug - Ürün Kullanıcı ID</CFormLabel>
+                  <p className="text-muted small">{productForm.kullaniciId}</p>
+                </CCol>
+              </CRow>
+            )}
           </CModalBody>
           <CModalFooter>
             <CButton

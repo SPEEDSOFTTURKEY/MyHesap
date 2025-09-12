@@ -29,7 +29,7 @@ import Pricing from "../../../components/products/Pricing";
 import OtherInfo from "../../../components/products/OtherInfo";
 import api from "../../../api/api";
 
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 const ProductNew = () => {
   const navigate = useNavigate();

@@ -23,7 +23,7 @@ import {
 import api from "../../api/api";
 
 // API Base URL
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 const WarehouseStockCount = () => {
   const { id: depoId } = useParams();
@@ -36,6 +36,17 @@ const WarehouseStockCount = () => {
   const [loading, setLoading] = useState(false);
   const [toasts, setToasts] = useState([]);
   const toaster = useRef();
+
+  // Kullanıcı ID'sini al
+  const getUserId = () => {
+    try {
+      const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+      return user.id;
+    } catch (err) {
+      console.error("Kullanıcı ID'si alınırken hata:", err);
+      return 0;
+    }
+  };
 
   const addToast = (message, type = "success") => {
     const id = Date.now();
@@ -62,23 +73,33 @@ const WarehouseStockCount = () => {
   };
 
   const fetchWarehouse = async (depoId) => {
+    const userId = getUserId();
+    if (!userId) {
+      addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "error");
+      navigate("/app/warehouses");
+      return;
+    }
+
     try {
       setLoading(true);
-      console.log("Fetching warehouse with ID:", depoId);
+      console.log("Fetching warehouse with ID:", depoId, "for userId:", userId);
       if (!depoId || isNaN(depoId)) {
         throw new Error("Geçersiz depo ID'si.");
       }
       const response = await api.get(
         `${API_BASE_URL}/depo/get-by-id/${depoId}`,
+        {
+          headers: { "kullaniciId": userId.toString() } // Kullanıcı ID'si eklendi
+        }
       );
       console.log("API Response from /depo/get-by-id:", response);
       console.log("Raw warehouse data from API:", response.data);
-      
+
       if (response.data.durumu !== 1) {
         throw new Error("Depo bulunamadı veya aktif değil.");
       }
-      setWarehouse({ id: response.data.id, adi: response.data.adi });
-      fetchProducts(response.data.id);
+      setWarehouse({ id: response.data.id, adi: response.data.adi, kullaniciId: userId });
+      fetchProducts(response.data.id, userId);
     } catch (err) {
       console.error("Depo yükleme hatası:", err.response?.data || err.message);
       console.error("Error details:", err);
@@ -89,12 +110,15 @@ const WarehouseStockCount = () => {
     }
   };
 
-  const fetchProducts = async (depoId) => {
+  const fetchProducts = async (depoId, userId) => {
     try {
       setLoading(true);
-      console.log("Fetching products for depoId:", depoId);
+      console.log("Fetching products for depoId:", depoId, "userId:", userId);
       const response = await api.get(
         `${API_BASE_URL}/depo/depolardaki-urunstoklar/${depoId}`,
+        {
+          headers: { "kullaniciId": userId.toString() } // Kullanıcı ID'si eklendi
+        }
       );
       console.log("API Response from /depo/depolardaki-urunstoklar:", response);
       console.log("Raw stock data from API:", response.data);
@@ -103,12 +127,10 @@ const WarehouseStockCount = () => {
         throw new Error("Stok verisi dizi formatında değil.");
       }
 
-      // Include all products for debugging (remove filter for durumu)
-      // const activeStocks = response.data.filter((item) => item.durumu === 1);
-      const activeStocks = response.data;
+      const activeStocks = response.data; // Tüm ürünleri al (durumu filtresi kaldırıldı)
 
       const validProducts = activeStocks
-        .filter((stock) => stock.urun) // Ensure Urun object exists
+        .filter((stock) => stock.urun) // Urun nesnesinin varlığını kontrol et
         .map((stock) => ({
           id: stock.id,
           code: stock.urun?.urunKodu || "Bilinmiyor",
@@ -118,6 +140,7 @@ const WarehouseStockCount = () => {
           unitCost: stock.fiyat || 0,
           urunId: stock.urunId,
           depoId: stock.depoId,
+          kullaniciId: userId, // Kullanıcı ID'si eklendi
         }));
 
       setProducts(validProducts);
@@ -165,6 +188,12 @@ const WarehouseStockCount = () => {
   };
 
   const handleSave = async () => {
+    const userId = getUserId();
+    if (!userId) {
+      addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "error");
+      return;
+    }
+
     try {
       setLoading(true);
       const payloads = products.map((product) => ({
@@ -176,25 +205,33 @@ const WarehouseStockCount = () => {
           },
         ],
         birimMaliyet: birimMaliyetler[product.urunId] || product.unitCost,
+        kullaniciId: userId, // Kullanıcı ID'si eklendi
       }));
 
       console.log("Saving stock data:", payloads);
-      
+
       const responses = await Promise.all(
         payloads.map((payload) =>
           api.post(
             `${API_BASE_URL}/urun/urun-toplu-depostok-guncelle`,
             payload,
+            {
+              headers: {
+                "Content-Type": "application/json",
+                accept: "*/*",
+                "kullaniciId": userId.toString(), // Kullanıcı ID'si header'a eklendi
+              },
+            }
           ),
         ),
       );
-      
+
       console.log("All save responses from API:", responses);
       responses.forEach((response, index) => {
         console.log(`Save response ${index + 1} from API:`, response);
         console.log(`Response data ${index + 1}:`, response.data);
       });
-      
+
       addToast("Stoklar güncellendi.", "success");
       navigate(`/app/warehouses/${depoId}`, { state: { warehouse } });
     } catch (err) {
@@ -221,11 +258,14 @@ const WarehouseStockCount = () => {
   };
 
   useEffect(() => {
+    const userId = getUserId();
     console.log(
       "useEffect triggered with depoId:",
       depoId,
       "warehouse:",
       warehouse,
+      "userId:",
+      userId
     );
     if (!depoId) {
       addToast("Depo ID'si bulunamadı.", "error");
@@ -235,7 +275,7 @@ const WarehouseStockCount = () => {
     if (!warehouse || warehouse.id !== parseInt(depoId)) {
       fetchWarehouse(depoId);
     } else {
-      fetchProducts(warehouse.id);
+      fetchProducts(warehouse.id, userId);
     }
   }, [depoId, warehouse, navigate]);
 
@@ -252,7 +292,6 @@ const WarehouseStockCount = () => {
       </CCard>
     );
   }
-
 
   return (
     <>
@@ -339,7 +378,7 @@ const WarehouseStockCount = () => {
                     <CTableHeaderCell>Barkod</CTableHeaderCell>
                     <CTableHeaderCell>Sistemdeki Miktar</CTableHeaderCell>
                     <CTableHeaderCell>Sayılan Miktar</CTableHeaderCell>
-                    {/* <CTableHeaderCell>Birim Maliyet</CTableHeaderCell> */}
+                    <CTableHeaderCell>Birim Maliyet</CTableHeaderCell>
                   </CTableRow>
                 </CTableHead>
                 <CTableBody>
@@ -361,7 +400,7 @@ const WarehouseStockCount = () => {
                           disabled={loading}
                         />
                       </CTableDataCell>
-                      {/* <CTableDataCell>
+                      <CTableDataCell>
                         <CFormInput
                           type="number"
                           step="0.01"
@@ -378,7 +417,7 @@ const WarehouseStockCount = () => {
                           style={{ width: "100px" }}
                           disabled={loading}
                         />
-                      </CTableDataCell> */}
+                      </CTableDataCell>
                     </CTableRow>
                   ))}
                 </CTableBody>

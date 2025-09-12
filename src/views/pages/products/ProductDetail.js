@@ -30,7 +30,7 @@ import { cilPencil, cilList, cilTrash } from "@coreui/icons";
 import ProductModal from "../../../components/products/ProductModal";
 import StockMovementModal from "../../../components/products/StockMovementModal";
 import api from "../../../api/api";
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 const ProductDetail = () => {
   const { id } = useParams();
