@@ -27,7 +27,7 @@ import CustomerTable from "../../../components/customers/CustomerTable";
 import CustomerModal from "../../../components/customers/CustomerModal";
 import api from "../../../api/api";
 import ErrorBoundary from "../products/ErrorBoundary";
-const API_BASE_URL = "https://speedsofttest.com/api";
+const API_BASE_URL = "https://localhost:44375/api";
 
 const Customers = () => {
   const [toasts, setToasts] = useState([]);

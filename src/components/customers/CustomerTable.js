@@ -19,7 +19,7 @@ import api from "../../api/api";
 import CustomerModal from "./CustomerModal";
 import ErrorBoundary from "../../views/pages/products/ErrorBoundary";
 
-const API_BASE_URL = "https://speedsofttest.com/api";
+const API_BASE_URL = "https://localhost:44375/api";
 
 const CustomerTable = ({ customers, onCustomerClick, fetchCustomers }) => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);

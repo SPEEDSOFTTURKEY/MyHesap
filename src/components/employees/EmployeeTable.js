@@ -31,7 +31,7 @@ import dayjs from "dayjs";
 import api from "../../api/api";
 import DatePickerField from "./DatePickerField";
 
-const API_BASE_URL = "https://speedsofttest.com/api";
+const API_BASE_URL = "https://localhost:44375/api";
 
 const EmployeeTable = ({
   transactions,

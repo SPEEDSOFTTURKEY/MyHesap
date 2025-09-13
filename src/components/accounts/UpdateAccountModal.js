@@ -15,7 +15,7 @@ import { useAccounts } from '../../context/AccountsContext';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/api';
 
-const API_BASE_URL = "https://speedsofttest.com/api";
+const API_BASE_URL = "https://localhost:44375/api";
 
 const UpdateAccountModal = () => {
   const {
@@ -28,6 +28,7 @@ const UpdateAccountModal = () => {
     users,
     setUsers,
     setToast,
+    userId,  // Context'ten al
   } = useAccounts();
   const navigate = useNavigate();
   // Silme ve pasif yapma modalları için state'ler
@@ -68,11 +69,12 @@ const UpdateAccountModal = () => {
       labelColor: formData.labelColor || '#cccccc',
       description: formData.description || '',
       spendingLimit: parseFloat(formData.spendingLimit) || 0,
-      balance: selectedUser.balance,
+      balance: parseFloat(formData.balance) || 0,
       currency: selectedUser.currency || 'TRY',
       transactions: selectedUser.transactions,
       type: selectedUser.type,
       hesapKategoriId: selectedUser.hesapKategoriId,
+      kullaniciId: userId,
     };
 
     try {
@@ -89,6 +91,7 @@ const UpdateAccountModal = () => {
         durumu: selectedUser.durumu || 1,
         aktif: selectedUser.aktif || 1,
         eklenmeTarihi: selectedUser.eklenmeTarihi || new Date().toISOString(),
+        kullaniciId: userId,  // Kullanıcı ID ekle (UPDATE için gerekli)
       });
 
       setSelectedUser(updatedUser);
@@ -112,11 +115,11 @@ const UpdateAccountModal = () => {
     setShowDeactivateModal(true);
   };
 
-  // Pasif yapma onayını işleme
+  // Pasif yapma onayını işleme (toggle route kullan)
   const confirmDeactivateAccount = async () => {
-    if (!selectedUser?.id) {
+    if (!selectedUser?.id || !userId) {
       setToast({
-        message: 'Hesap ID\'si eksik.',
+        message: 'Hesap ID\'si veya kullanıcı ID\'si eksik.',
         color: 'danger',
       });
       setShowDeactivateModal(false);
@@ -124,32 +127,22 @@ const UpdateAccountModal = () => {
     }
 
     try {
-      await api.put(`${API_BASE_URL}/Hesap/hesap-update`, {
-        id: selectedUser.id,
-        tanim: selectedUser.userName,
-        hesapNo: selectedUser.accountNumber,
-        guncelBakiye: selectedUser.balance,
-        paraBirimi: selectedUser.currency,
-        etiketRengi: selectedUser.labelColor,
-        harcamaLimiti: selectedUser.spendingLimit || 0,
-        guncellenmeTarihi: new Date().toISOString(),
-        hesapKategoriId: selectedUser.hesapKategoriId,
-        durumu: 0, // Pasif durumu
-        aktif: 0, // Pasif
-        eklenmeTarihi: selectedUser.eklenmeTarihi || new Date().toISOString(),
-      });
+      // Backend toggle route'u kullan: hesap-aktif/{id} (query string yok, session'dan al)
+      await api.put(`${API_BASE_URL}/Hesap/hesap-aktif/${selectedUser.id}`);
 
       const updatedUser = {
         ...selectedUser,
-        durumu: 0,
-        aktif: 0,
+        aktif: selectedUser.aktif === 1 ? 0 : 1,  // Toggle
       };
 
       setSelectedUser(updatedUser);
       setUsers((prevUsers) =>
         prevUsers.map((u) => (u.id === selectedUser.id ? updatedUser : u))
       );
-      setToast({ message: `Hesap "${formData.userName}" pasif yapıldı.`, color: 'warning' });
+      setToast({ 
+        message: updatedUser.aktif === 1 ? `Hesap "${formData.userName}" aktifleştirildi.` : `Hesap "${formData.userName}" pasif yapıldı.`, 
+        color: updatedUser.aktif === 1 ? 'success' : 'warning' 
+      });
       setModalVisible(false);
       setShowDeactivateModal(false);
       navigate('/app/dashboard');
@@ -171,16 +164,17 @@ const UpdateAccountModal = () => {
 
   // Silme onayını işleme
   const confirmDeleteAccount = async () => {
-    if (!selectedUser?.id) {
+    if (!selectedUser?.id || !userId) {
       setToast({
-        message: 'Hesap ID\'si eksik.',
+        message: 'Hesap ID\'si veya kullanıcı ID\'si eksik.',
         color: 'danger',
       });
       setShowDeleteModal(false);
       return;
     }
     try {
-      await api.delete(`${API_BASE_URL}/Hesap/hesap-delete/${selectedUser.id}`);
+      // Query parametresi olarak kullaniciId ekle
+      await api.delete(`${API_BASE_URL}/Hesap/hesap-delete/${selectedUser.id}?kullaniciId=${userId}`);
       setUsers((prevUsers) => prevUsers.filter((u) => u.id !== selectedUser.id));
       setSelectedUser(null);
       setToast({ message: 'Hesap silindi.', color: 'success' });
@@ -221,6 +215,15 @@ const UpdateAccountModal = () => {
               value={formData.accountNumber}
               onChange={handleChange}
             />
+            <CFormLabel htmlFor="balance" className="mt-3">
+              Güncel Bakiye
+            </CFormLabel>
+            <CFormInput
+              type="number"
+              name="balance"
+              value={formData.balance}
+              onChange={handleChange}
+            />
             <CFormLabel htmlFor="labelColor" className="mt-3">
               Etiket Rengi
             </CFormLabel>
@@ -239,15 +242,6 @@ const UpdateAccountModal = () => {
               value={formData.spendingLimit}
               onChange={handleChange}
             />
-            <CFormLabel htmlFor="description" className="mt-3">
-              Açıklama
-            </CFormLabel>
-            <CFormTextarea
-              name="description"
-              rows={3}
-              value={formData.description}
-              onChange={handleChange}
-            />
           </CForm>
         </CModalBody>
         <CModalFooter className="d-flex justify-content-between">
@@ -258,7 +252,7 @@ const UpdateAccountModal = () => {
               style={{ color: 'white' }}
               onClick={handleDeactivateAccount}
             >
-              Pasif Yap
+              Pasif/Aktif Yap
             </CButton>
             <CButton
               color="danger"
@@ -315,12 +309,12 @@ const UpdateAccountModal = () => {
         backdrop="static"
       >
         <CModalHeader style={{ backgroundColor: '#F6A213', color: '#FFFFFF' }}>
-          <CModalTitle>Pasif Yapma Onayı</CModalTitle>
+          <CModalTitle>Pasif/Aktif Yapma Onayı</CModalTitle>
         </CModalHeader>
         <CModalBody>
           <p>
             Hesap "<strong>{formData?.userName || 'Bilinmeyen Hesap'}</strong>"
-            pasif yapılacak, emin misiniz?
+            {selectedUser?.aktif === 1 ? ' pasif ' : ' aktif '}yapılacak, emin misiniz?
           </p>
         </CModalBody>
         <CModalFooter>
@@ -335,7 +329,7 @@ const UpdateAccountModal = () => {
             onClick={confirmDeactivateAccount}
             className="text-white"
           >
-            Pasif Yap
+            Onayla
           </CButton>
         </CModalFooter>
       </CModal>

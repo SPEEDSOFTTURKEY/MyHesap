@@ -43,7 +43,7 @@ const Definitions = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [toast, setToast] = useState(null);
   const toaster = useRef();
-const API_BASE_URL = "https://speedsofttest.com/api";
+const API_BASE_URL = "https://localhost:44375/api";
 
   const definitionConfigs = [
     { key: "urunMarka", label: "Ürün Markaları", endpoint: `${API_BASE_URL}/urunMarka` },

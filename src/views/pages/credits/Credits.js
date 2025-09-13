@@ -40,7 +40,7 @@ const Credits = () => {
     6: "semiannually",
     12: "annually",
   };
-const API_BASE_URL = "https://speedsofttest.com/api";
+const API_BASE_URL = "https://localhost:44375/api";
 
   // Kullanıcı ID'sini al
   const getUserId = () => {

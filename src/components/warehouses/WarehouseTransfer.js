@@ -22,7 +22,7 @@ import {
 import api from "../../api/api";
 
 // API Base URL
-const API_BASE_URL = "https://speedsofttest.com/api";
+const API_BASE_URL = "https://localhost:44375/api";
 
 const WarehouseTransfer = () => {
   const [warehouses, setWarehouses] = useState([]);

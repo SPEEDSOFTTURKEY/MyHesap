@@ -20,7 +20,7 @@ import api from "../../api/api";
 import dayjs from "dayjs";
 import "../../scss/style.scss";
 
-const API_BASE_URL = "https://speedsofttest.com/api";
+const API_BASE_URL = "https://localhost:44375/api";
 
 const accountCategories = [
   { categoryId: 1, accountName: "Banka Hesapları", type: "bank" },
@@ -415,42 +415,6 @@ const TransferModal = () => {
         editingTransaction
           ? api.put(`${API_BASE_URL}/hesapHareket/hesapHareket-update`, recipientTransactionObj)
           : api.post(`${API_BASE_URL}/hesapHareket/hesapHareket-create`, recipientTransactionObj),
-      ]);
-
-      // Update account balances
-      await Promise.all([
-        api.put(`${API_BASE_URL}/Hesap/hesap-update`, {
-          id: sender.id,
-          tanim: sender.userName,
-          hesapNo: sender.accountNumber,
-          guncelBakiye: newSenderBalance,
-          paraBirimi: sender.currency,
-          etiketRengi: sender.labelColor,
-          harcamaLimiti: sender.spendingLimit || 0,
-          guncellenmeTarihi: new Date().toISOString(),
-          hesapKategoriId: sender.hesapKategoriId,
-          durumu: senderResponse.data.durumu || 1,
-          aktif: senderResponse.data.aktif || 1,
-          eklenmeTarihi:
-            accountSenderResponse.data[0]?.eklenmeTarihi ||
-            new Date().toISOString(),
-        }),
-        api.put(`${API_BASE_URL}/Hesap/hesap-update`, {
-          id: recipient.id,
-          tanim: recipient.userName,
-          hesapNo: recipient.accountNumber,
-          guncelBakiye: newRecipientBalance,
-          paraBirimi: recipient.currency,
-          etiketRengi: recipient.labelColor,
-          harcamaLimiti: recipient.spendingLimit || 0,
-          guncellenmeTarihi: new Date().toISOString(),
-          hesapKategoriId: recipient.hesapKategoriId,
-          durumu: recipientResponse.data.durumu || 1,
-          aktif: recipientResponse.data.aktif || 1,
-          eklenmeTarihi:
-            accountRecipientResponse.data[0]?.eklenmeTarihi ||
-            new Date().toISOString(),
-        }),
       ]);
 
       // Update local state

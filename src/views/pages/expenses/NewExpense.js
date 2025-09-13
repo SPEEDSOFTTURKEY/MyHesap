@@ -24,7 +24,7 @@ import dayjs from "dayjs";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useUsers } from "../../../context/UsersContext";
 import api from "../../../api/api";
-const API_BASE_URL = "https://speedsofttest.com/api";
+const API_BASE_URL = "https://localhost:44375/api";
 
 // Hesap kategorileri
 const accountCategories = [
@@ -373,13 +373,13 @@ const NewExpense = () => {
         console.log("Hesap update payload:", hesapUpdatePayload);
         
         const hesapResponse = await api.put(
-          `${API_BASE_URL}/Hesap/hesap-update`,
+          `${API_BASE_URL}/Hesap/hesapp-update`,
           hesapUpdatePayload,
           {
             headers: { "Content-Type": "application/json", accept: "*/*" },
           },
         );
-        console.log("Hesap update API response (Hesap/hesap-update):", hesapResponse.data);
+        console.log("Hesap update API response (Hesap/hesapp-update):", hesapResponse.data);
       }
 
       setToast({

@@ -62,7 +62,7 @@ const CreditDetail = () => {
     hesapId: "",
     kullaniciId: 0,
   });
-  const API_BASE_URL = "https://speedsofttest.com/api";
+  const API_BASE_URL = "https://localhost:44375/api";
 
   const [paymentDate, setPaymentDate] = useState(dayjs());
   const toaster = useRef();

@@ -12,7 +12,7 @@ import {
 } from "@coreui/react";
 import axios from "axios";
 
-const API_BASE_URL = "https://speedsofttest.com/api";
+const API_BASE_URL = "https://localhost:44375/api";
 
 const NonSalesCustomersReport = () => {
   const [customers, setCustomers] = useState([]);

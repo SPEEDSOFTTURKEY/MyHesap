@@ -25,7 +25,7 @@ const accountCategories = [
 ];
 
 const AccountsContext = createContext();
-const API_BASE_URL = "https://speedsofttest.com/api";
+const API_BASE_URL = "https://localhost:44375/api";
 
 export const AccountsProvider = ({ children }) => {
   const location = useLocation();
@@ -82,6 +82,7 @@ export const AccountsProvider = ({ children }) => {
     2: "Para Çıkışı",
     3: "Transfer Çıkış",
     4: "Transfer Giriş",
+    5:"İptal",
   };
 
   // localStorage değişikliklerini dinle ve userId'yi güncelle
@@ -128,7 +129,7 @@ export const AccountsProvider = ({ children }) => {
       const isOutgoing = islemTuruId === 3;
 
       if (etkilenenHesapId) {
-        const targetAccountResponse = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-by-Id/${etkilenenHesapId}`);
+        const targetAccountResponse = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-byy-Id/${etkilenenHesapId}`);
         const targetAccount = targetAccountResponse.data;
         const response = await api.get(`${API_BASE_URL}/hesapHareket/hesapHareket-get-by-Id/${currentUserId}/${etkilenenHesapId}/${targetAccount.hesapKategoriId || fallbackHesapKategoriId || 1}`);
         const transactions = Array.isArray(response.data) ? response.data : [];
@@ -211,7 +212,7 @@ export const AccountsProvider = ({ children }) => {
       return;
     }
     try {
-      const response = await api.get(`${API_BASE_URL}/hesapHareket/hesapHareket-get-by-Id/${currentUserId}/${hesapId}/${hesapKategoriId}`);
+      const response = await api.get(`${API_BASE_URL}/hesapHareket/hesapHareket-get-by-Id/${hesapId}`);
       console.log("API Response:", JSON.stringify(response.data, null, 2));
       const fetchedTransactions = Array.isArray(response.data) ? response.data : [];
       const formattedTransactions = await Promise.all(fetchedTransactions.map(async (t) => {
@@ -226,7 +227,7 @@ export const AccountsProvider = ({ children }) => {
             recipientUser = users.find((u) => u.id === targetHesapId);
             if (!recipientUser) {
               try {
-                const recipientResponse = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-by-Id/${targetHesapId}`);
+                const recipientResponse = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-byy-Id/${targetHesapId}`);
                 const data = recipientResponse.data;
                 recipientUser = {
                   id: data.id,
@@ -260,7 +261,7 @@ export const AccountsProvider = ({ children }) => {
               t.etkilenenHesapId = targetHesapId;
               recipientUser = users.find((u) => u.id === targetHesapId);
               if (!recipientUser) {
-                const recipientResponse = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-by-Id/${targetHesapId}`);
+                const recipientResponse = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-byy-Id/${targetHesapId}`);
                 const data = recipientResponse.data;
                 recipientUser = {
                   id: data.id,
@@ -384,7 +385,7 @@ export const AccountsProvider = ({ children }) => {
     return currentBalance + adjustment;
   };
 
-  const updateAccountBalance = async (accountId, newBalance, accountData) => {
+  const updateAccountBalance = async (accountId, newBalance, accountData, currentUserId = userId) => {
     const updatePayload = {
       id: accountId,
       tanim: accountData.tanim,
@@ -398,9 +399,9 @@ export const AccountsProvider = ({ children }) => {
       durumu: accountData.durumu || 1,
       aktif: accountData.aktif || 1,
       eklenmeTarihi: accountData.eklenmeTarihi || new Date().toISOString(),
-      kullaniciId: userId,
+      kullaniciId: currentUserId,
     };
-    await api.put(`${API_BASE_URL}/Hesap/hesap-update`, updatePayload);
+    await api.put(`${API_BASE_URL}/Hesap/hesapp-update`, updatePayload);
   };
 
   const updateLocalStates = (updatedTransactions, newSenderBalance, newRecipientBalance, senderId, recipientId, transaction, relatedTransaction = null) => {
@@ -435,7 +436,7 @@ export const AccountsProvider = ({ children }) => {
     const isTransfer = isOutgoingTransfer || isIncomingTransfer;
 
     try {
-      const senderResponse = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-by-Id/${transaction.hesapId}`);
+      const senderResponse = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-byy-Id/${transaction.hesapId}`);
       let senderBalance = parseFloat(senderResponse.data.guncelBakiye) || 0;
       let newSenderBalance = calculateBalanceAdjustment(senderBalance, transaction, amount, true);
 
@@ -450,7 +451,7 @@ export const AccountsProvider = ({ children }) => {
           return;
         }
 
-        const recipientResponse = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-by-Id/${transaction.etkilenenHesapId}`);
+        const recipientResponse = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-byy-Id/${transaction.etkilenenHesapId}`);
         recipientAccount = recipientResponse.data;
         let recipientBalance = parseFloat(recipientAccount.guncelBakiye) || 0;
         newRecipientBalance = calculateBalanceAdjustment(recipientBalance, transaction, amount, true);
@@ -459,8 +460,8 @@ export const AccountsProvider = ({ children }) => {
       await api.delete(`${API_BASE_URL}/hesapHareket/hesapHareket-delete/${transaction.id}`);
       if (relatedTransaction) await api.delete(`${API_BASE_URL}/hesapHareket/hesapHareket-delete/${relatedTransaction.id}`);
 
-      await updateAccountBalance(transaction.hesapId, newSenderBalance, senderResponse.data);
-      if (isTransfer && recipientAccount) await updateAccountBalance(transaction.etkilenenHesapId, newRecipientBalance, recipientAccount);
+      await updateAccountBalance(transaction.hesapId, newSenderBalance, senderResponse.data, currentUserId);
+      if (isTransfer && recipientAccount) await updateAccountBalance(transaction.etkilenenHesapId, newRecipientBalance, recipientAccount, currentUserId);
 
       const updatedTransactions = rawTransactions.filter((t) => t.id !== transaction.id && t.id !== (relatedTransaction?.id || null));
       updateLocalStates(updatedTransactions, newSenderBalance, newRecipientBalance, transaction.hesapId, transaction.etkilenenHesapId, transaction, relatedTransaction);
@@ -488,7 +489,7 @@ export const AccountsProvider = ({ children }) => {
     const isTransfer = isOutgoingTransfer || isIncomingTransfer;
 
     try {
-      const senderResponse = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-by-Id/${transactionToDelete.hesapId}`);
+      const senderResponse = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-byy-Id/${transactionToDelete.hesapId}`);
       let senderBalance = parseFloat(senderResponse.data.guncelBakiye) || 0;
       let newSenderBalance = calculateBalanceAdjustment(senderBalance, transactionToDelete, amount, true);
 
@@ -502,7 +503,7 @@ export const AccountsProvider = ({ children }) => {
           console.warn("confirmDeleteTransaction: Karşı işlem bulunamadı", transactionToDelete.etkilenenHesapId);
           return;
         }
-        const recipientResponse = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-by-Id/${transactionToDelete.etkilenenHesapId}`);
+        const recipientResponse = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-byy-Id/${transactionToDelete.etkilenenHesapId}`);
         recipientAccount = recipientResponse.data;
         let recipientBalance = parseFloat(recipientAccount.guncelBakiye) || 0;
         newRecipientBalance = calculateBalanceAdjustment(recipientBalance, transactionToDelete, amount, true);
@@ -515,8 +516,8 @@ export const AccountsProvider = ({ children }) => {
       await api.delete(`${API_BASE_URL}/hesapHareket/hesapHareket-delete/${transactionToDelete.id}`);
       if (relatedTransaction) await api.delete(`${API_BASE_URL}/hesapHareket/hesapHareket-delete/${relatedTransaction.id}`);
 
-      await updateAccountBalance(transactionToDelete.hesapId, newSenderBalance, senderResponse.data);
-      if (isTransfer && recipientAccount) await updateAccountBalance(transactionToDelete.etkilenenHesapId, newRecipientBalance, recipientAccount);
+      await updateAccountBalance(transactionToDelete.hesapId, newSenderBalance, senderResponse.data, currentUserId);
+      if (isTransfer && recipientAccount) await updateAccountBalance(transactionToDelete.etkilenenHesapId, newRecipientBalance, recipientAccount, currentUserId);
 
       const updatedTransactions = rawTransactions
         .filter((t) => t.id !== transactionToDelete.id && t.id !== (relatedTransaction?.id || null))
@@ -562,7 +563,8 @@ export const AccountsProvider = ({ children }) => {
     }
 
     try {
-      const response = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-by-Id/${transactionToCancel.hesapId}`);
+      const response = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-byy-Id/${transactionToCancel.hesapId}`);
+      console.log("Accounts;",transactionToCancel.hesapId);
       let currentBalance = parseFloat(response.data.guncelBakiye) || 0;
       const amount = parseFloat(transactionToCancel.tutar) || 0;
 
@@ -590,7 +592,7 @@ export const AccountsProvider = ({ children }) => {
         return;
       }
 
-      affectedAccountResponse = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-by-Id/${transactionToCancel.etkilenenHesapId}`);
+      affectedAccountResponse = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-byy-Id/${transactionToCancel.etkilenenHesapId}?kullaniciId=${currentUserId}`);
       let affectedBalance = parseFloat(affectedAccountResponse.data.guncelBakiye);
       affectedAccountBalance = calculateBalanceAdjustment(affectedBalance, relatedTransaction, amount, false);
 
@@ -635,8 +637,8 @@ export const AccountsProvider = ({ children }) => {
       await api.post(`${API_BASE_URL}/hesapHareket/hesapHareket-create`, cancelTransactionObj);
       await api.post(`${API_BASE_URL}/hesapHareket/hesapHareket-create`, relatedCancelTransactionObj);
 
-      await updateAccountBalance(transactionToCancel.hesapId, newBalance, response.data);
-      if (affectedAccountResponse) await updateAccountBalance(transactionToCancel.etkilenenHesapId, affectedAccountBalance, affectedAccountResponse.data);
+      await updateAccountBalance(transactionToCancel.hesapId, newBalance, response.data, currentUserId);
+      if (affectedAccountResponse) await updateAccountBalance(transactionToCancel.etkilenenHesapId, affectedAccountBalance, affectedAccountResponse.data, currentUserId);
 
       const newTransaction = {
         id: Date.now(),
@@ -730,7 +732,7 @@ export const AccountsProvider = ({ children }) => {
         recipientUser = users.find((u) => u.id === targetHesapId);
         if (!recipientUser) {
           try {
-            const response = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-by-Id/${targetHesapId}`);
+            const response = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-byy-Id/${targetHesapId}?kullaniciId=${currentUserId}`);
             const data = response.data;
             recipientUser = {
               id: data.id,
@@ -851,8 +853,8 @@ export const AccountsProvider = ({ children }) => {
         return;
       }
 
-      const accountSenderResponse = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-by-Id/${etkilenenHesapId}`);
-      const accountRecipientResponse = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-by-Id/${etkilenenHesapId}`);
+      const accountSenderResponse = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-byy-Id/${sender.id}?kullaniciId=${currentUserId}`);
+      const accountRecipientResponse = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-byy-Id/${recipient.id}?kullaniciId=${currentUserId}`);
       let senderBalance = parseFloat(accountSenderResponse.data.guncelBakiye) || 0;
       let recipientBalance = parseFloat(accountRecipientResponse.data.guncelBakiye) || 0;
 
@@ -940,8 +942,8 @@ export const AccountsProvider = ({ children }) => {
         ? await api.put(`${API_BASE_URL}/hesapHareket/hesapHareket-update`, recipientTransactionObj)
         : await api.post(`${API_BASE_URL}/hesapHareket/hesapHareket-create`, recipientTransactionObj);
 
-      await updateAccountBalance(sender.id, newSenderBalance, accountSenderResponse.data);
-      await updateAccountBalance(recipient.id, newRecipientBalance, accountRecipientResponse.data);
+      await updateAccountBalance(sender.id, newSenderBalance, accountSenderResponse.data, currentUserId);
+      await updateAccountBalance(recipient.id, newRecipientBalance, accountRecipientResponse.data, currentUserId);
 
       const senderTransaction = {
         id: senderResponse.data.id || Date.now(),
@@ -1027,94 +1029,96 @@ export const AccountsProvider = ({ children }) => {
     }
   };
 
-  const fetchAccount = async () => {
-    const currentUserId = userId;
-    if (!currentUserId) {
-      setError("Kullanıcı ID bulunamadı.");
-      return;
-    }
-    setLoading(true);
-    try {
-      const contextUser = users.find((u) => u.id === currentUserId);
-      if (contextUser) {
-        setSelectedUser({ ...contextUser, kullaniciId: currentUserId });
-        setFormData({
-          userName: contextUser.userName || "",
-          accountNumber: contextUser.accountNumber || "",
-          balance: contextUser.balance || 0,
-          currency: contextUser.currency || "TRY",
-          labelColor: contextUser.labelColor || "#ccc",
-          spendingLimit: contextUser.spendingLimit || "",
-          type: contextUser.type || "cash",
-          description: contextUser.description || "",
-          kullaniciId: currentUserId,
-        });
-        setAccountData({
-          id: contextUser.id,
-          tanim: contextUser.userName,
-          hesapNo: contextUser.accountNumber,
-          guncelBakiye: contextUser.balance,
-          paraBirimi: contextUser.currency,
-          etiketRengi: contextUser.labelColor,
-          harcamaLimiti: contextUser.spendingLimit,
-          hesapKategoriId: contextUser.hesapKategoriId || 1,
-          kullaniciId: currentUserId,
-        });
-        if (contextUser.id && contextUser.hesapKategoriId) {
-          await fetchTransactions(currentUserId, contextUser.id, contextUser.hesapKategoriId);
-        } else {
-          setError("Hesap ID veya kategori ID eksik.");
-        }
-        setError(null);
-        setLoading(false);
-        return;
-      }
-      const response = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-by-Id/${currentUserId}`);
-      const data = response.data;
-      const formattedUser = {
-        id: data.id,
-        userName: data.tanim?.trim() || "İsimsiz Hesap",
-        accountNumber: data.hesapNo?.trim() || "",
-        balance: data.guncelBakiye || 0,
-        currency: data.paraBirimi || "TRY",
-        labelColor: data.etiketRengi || "#ccc",
-        spendingLimit: data.harcamaLimiti || 0,
-        type: accountCategories.find((cat) => cat.categoryId === data.hesapKategoriId)?.type || "cash",
-        hesapKategoriId: data.hesapKategoriId || 1,
-        kullaniciId: currentUserId,
-      };
-      setSelectedUser({ ...formattedUser });
+const fetchAccount = async (accountId) => {  // accountId parametresi eklendi
+  const currentUserId = userId;
+  if (!accountId) {  // accountId kontrolü
+    setError("Hesap ID bulunamadı.");
+    return;
+  }
+  setLoading(true);
+  try {
+    const contextUser = users.find((u) => u.id === accountId);  // currentUserId yerine accountId
+    if (contextUser) {
+      setSelectedUser({ ...contextUser, kullaniciId: currentUserId });
       setFormData({
-        userName: data.tanim || "",
-        accountNumber: data.hesapNo || "",
-        balance: data.guncelBakiye || 0,
-        currency: data.paraBirimi || "TRY",
-        labelColor: data.etiketRengi || "#ccc",
-        spendingLimit: data.harcamaLimiti || "",
-        type: formattedUser.type,
-        description: data.description || "",
+        userName: contextUser.userName || "",
+        accountNumber: contextUser.accountNumber || "",
+        balance: contextUser.balance || 0,
+        currency: contextUser.currency || "TRY",
+        labelColor: contextUser.labelColor || "#ccc",
+        spendingLimit: contextUser.spendingLimit || "",
+        type: contextUser.type || "cash",
+        description: contextUser.description || "",
         kullaniciId: currentUserId,
       });
-      setAccountData({ ...data, kullaniciId: currentUserId });
-      setUsers((prevUsers) => {
-        const userExists = prevUsers.some((u) => u.id === data.id);
-        if (!userExists && formattedUser.userName) return [...prevUsers, formattedUser];
-        return prevUsers;
+      setAccountData({
+        id: contextUser.id,
+        tanim: contextUser.userName,
+        hesapNo: contextUser.accountNumber,
+        guncelBakiye: contextUser.balance,
+        paraBirimi: contextUser.currency,
+        etiketRengi: contextUser.labelColor,
+        harcamaLimiti: contextUser.spendingLimit,
+        hesapKategoriId: contextUser.hesapKategoriId || 1,
+        kullaniciId: currentUserId,
       });
-
-      if (data.id && data.hesapKategoriId) {
-        await fetchTransactions(currentUserId, data.id, data.hesapKategoriId);
+      if (contextUser.id && contextUser.hesapKategoriId) {
+        await fetchTransactions(currentUserId, contextUser.id, contextUser.hesapKategoriId);
       } else {
         setError("Hesap ID veya kategori ID eksik.");
       }
       setError(null);
-    } catch (err) {
-      setError("Hesap bilgileri alınamadı: " + (err.response?.data?.message || err.message));
-    } finally {
       setLoading(false);
+      return;
     }
-  };
+    
+    // API çağrısında accountId kullanılıyor
+    // const response = await api.get(`${API_BASE_URL}/Hesap/Hesap-get-byy-Id/${accountId}`);
+    console.log("account", accountId);
+    const data = response.data;
+    const formattedUser = {
+      id: data.id,
+      userName: data.tanim?.trim() || "İsimsiz Hesap",
+      accountNumber: data.hesapNo?.trim() || "",
+      balance: data.guncelBakiye || 0,
+      currency: data.paraBirimi || "TRY",
+      labelColor: data.etiketRengi || "#ccc",
+      spendingLimit: data.harcamaLimiti || 0,
+      type: accountCategories.find((cat) => cat.categoryId === data.hesapKategoriId)?.type || "cash",
+      hesapKategoriId: data.hesapKategoriId || 1,
+      kullaniciId: currentUserId,
+    };
+    setSelectedUser({ ...formattedUser });
+    setFormData({
+      userName: data.tanim || "",
+      accountNumber: data.hesapNo || "",
+      balance: data.guncelBakiye || 0,
+      currency: data.paraBirimi || "TRY",
+      labelColor: data.etiketRengi || "#ccc",
+      spendingLimit: data.harcamaLimiti || "",
+      type: formattedUser.type,
+      description: data.description || "",
+      kullaniciId: currentUserId,
+    });
+    setAccountData({ ...data, kullaniciId: currentUserId });
+    setUsers((prevUsers) => {
+      const userExists = prevUsers.some((u) => u.id === data.id);
+      if (!userExists && formattedUser.userName) return [...prevUsers, formattedUser];
+      return prevUsers;
+    });
 
+    if (data.id && data.hesapKategoriId) {
+      await fetchTransactions(currentUserId, data.id, data.hesapKategoriId);
+    } else {
+      setError("Hesap ID veya kategori ID eksik.");
+    }
+    setError(null);
+  } catch (err) {
+    setError("Hesap bilgileri alınamadı: " + (err.response?.data?.message || err.message));
+  } finally {
+    setLoading(false);
+  }
+};
   const createAccount = async (newAccountData) => {
     const currentUserId = getUserId();
     try {
@@ -1126,7 +1130,7 @@ export const AccountsProvider = ({ children }) => {
         etiketRengi: newAccountData.labelColor,
         harcamaLimiti: newAccountData.spendingLimit || 0,
         hesapKategoriId: accountCategories.find((cat) => cat.type === newAccountData.type)?.categoryId || 2,
-        kullanicilarId: currentUserId,
+        kullaniciId: currentUserId,  // Backend'e uyumlu: kullaniciId
         eklenmeTarihi: new Date().toISOString(),
         guncellenmeTarihi: new Date().toISOString(),
         durumu: 1,
@@ -1134,7 +1138,7 @@ export const AccountsProvider = ({ children }) => {
       };
 
       const response = await api.post(`${API_BASE_URL}/Hesap/hesap-create`, payload);
-      const createdAccount = response.data;
+      const createdAccount = response.data.data || response.data;  // CreatedAtAction'dan dönen Data
 
       const formattedAccount = {
         id: createdAccount.id,
@@ -1154,22 +1158,25 @@ export const AccountsProvider = ({ children }) => {
     }
   };
 
-  useEffect(() => {
-    fetchAccount();
-    return () => {
-      setTransactionForm({
-        rawAmount: "",
-        formattedAmount: "",
-        description: "",
-        date: dayjs().format("DD.MM.YYYY"),
-        recipientAccount: "",
-        submissionTimestamp: null,
-        kullaniciId: userId,
-      });
-      setEditingTransaction(null);
-      processedSubmissions.current.clear();
-    };
-  }, [userId]);
+ useEffect(() => {
+  // Eğer belirli bir accountId varsa onu kullanın, yoksa userId'yi kullanın
+  const targetAccountId = location.state?.accountId || userId;
+  fetchAccount(targetAccountId);
+  
+  return () => {
+    setTransactionForm({
+      rawAmount: "",
+      formattedAmount: "",
+      description: "",
+      date: dayjs().format("DD.MM.YYYY"),
+      recipientAccount: "",
+      submissionTimestamp: null,
+      kullaniciId: userId,
+    });
+    setEditingTransaction(null);
+    processedSubmissions.current.clear();
+  };
+}, [userId, location.state?.accountId]); // location.state?.accountId dependency eklendi
 
   useEffect(() => {
     if (modalVisible && selectedUser) {

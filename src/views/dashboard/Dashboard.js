@@ -19,6 +19,7 @@ import {
 import WidgetsDropdown from "../../components/WidgetsDropdown";
 import { useAccounts } from "../../context/AccountsContext"; // AccountsContext kullanıyoruz
 import { useUser } from "../../context/UserContext";
+import { useNavigate } from "react-router-dom"; // Tıklama sonrası navigasyon için ekledim
 import { cilPlus } from "@coreui/icons";
 import CIcon from "@coreui/icons-react";
 import api from "../../api/api";
@@ -28,9 +29,10 @@ const Dashboard = () => {
   const [formType, setFormType] = useState("");
   const [toast, setToast] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
-  const { users, setUsers, createAccount } = useAccounts(); // AccountsContext'ten kullanıyoruz
+  const { users, setUsers, createAccount, fetchAccount } = useAccounts(); // fetchAccount'ı da import ettik (tıklama için)
   const { user, logout } = useUser();
-const API_BASE_URL = "https://speedsofttest.com/api";
+  const navigate = useNavigate(); // Navigasyon için
+  const API_BASE_URL = "https://localhost:44375/api";
 
   const typeToCategoryId = {
     bank: 1,
@@ -96,7 +98,22 @@ const API_BASE_URL = "https://speedsofttest.com/api";
     }
   };
 
-
+  // Yeni: Hesaba tıklandığında bu fonksiyonu çağır – ID'yi API'ye gönder
+  const handleAccountClick = async (accountId) => {
+    console.log("Tıklanan hesap ID:", accountId); // Debug için
+    try {
+      // AccountsContext'teki fetchAccount'ı çağır – bu, /Hesap-get-by-Id/{accountId} endpoint'ini tetikleyecek
+      await fetchAccount(accountId); // Context'teki fonksiyon, ID'yi route'a koyar
+      // Opsiyonel: Detay sayfasına yönlendir
+      navigate(`/app/account/${accountId}`); // Eğer böyle bir route'un varsa, yoksa kaldır
+    } catch (error) {
+      console.error("Hesap detayları yüklenemedi:", error);
+      setToast({
+        message: `Hesap detayları yüklenirken hata: ${error.message}`,
+        color: "danger",
+      });
+    }
+  };
 
   const handleCashSubmit = async (formData) => {
     setIsSaving(true);
@@ -374,7 +391,8 @@ const API_BASE_URL = "https://speedsofttest.com/api";
           type={formType}
         />
       </div>
-      <WidgetsDropdown />
+      {/* WidgetsDropdown'a handleAccountClick prop'u geçir – içindeki her hesap item'ına onClick ekle */}
+      <WidgetsDropdown accounts={users} onAccountClick={handleAccountClick} />
     </>
   );
 };

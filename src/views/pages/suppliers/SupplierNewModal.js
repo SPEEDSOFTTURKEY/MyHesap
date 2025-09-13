@@ -29,7 +29,7 @@ import SupplierOther from "../../../components/suppliers/SupplierOther";
 
 // Configure Axios instance
 const api = axios.create({
-  baseURL: "https://speedsofttest.com/api",
+  baseURL: "https://localhost:44375/api",
   headers: {
     "Content-Type": "multipart/form-data",
   },

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { CFormLabel, CFormInput, CFormSelect, CRow, CCol } from "@coreui/react";
 import api from "../../api/api";
 
-const API_BASE_URL = "https://speedsofttest.com/api";
+const API_BASE_URL = "https://localhost:44375/api";
 
 const ProductDefinition = ({ formData, handleChange, refreshTrigger }) => {
   const [categories, setCategories] = useState([]);

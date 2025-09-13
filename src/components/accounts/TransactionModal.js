@@ -18,7 +18,7 @@ import api from "../../api/api";
 import dayjs from "dayjs";
 import "../../scss/style.scss";
 
-const API_BASE_URL = "https://speedsofttest.com/api";
+const API_BASE_URL = "https://localhost:44375/api";
 
 // CSS stili doğrudan bileşen içinde tanımlanıyor
 const modalStyles = `
@@ -131,7 +131,7 @@ const TransactionModal = () => {
       const response = await api.get(
         `${API_BASE_URL}/Hesap/Hesap-get-by-Id/${selectedUser.id}`
       );
-
+      console.log("TransactionModal;", selectedUser.id);
       console.log("API'den gelen yanıt:", response.data);
 
       // Dizi içinden ilk hesabın bakiyesini alıyoruz
@@ -160,7 +160,7 @@ const TransactionModal = () => {
       }
       try {
         const transactionResponse = await api.get(
-          `${API_BASE_URL}/hesapHareket/hesapHareket-get-by-Id/${userId}/${selectedUser.id}/${selectedUser.hesapKategoriId}`
+          `${API_BASE_URL}/hesapHareket/hesapHareket-get-by-Id/${selectedUser.id}`
         );
         transactionToRemove = transactionResponse.data.find(
           (t) => t.id === editingTransaction.id
@@ -228,14 +228,16 @@ const TransactionModal = () => {
       durumu: 1,
     };
 
-    console.log("API'ye gönderilen işlem objesi:", transactionObj); // 
+    console.log("API'ye gönderilen işlem objesi:", transactionObj);
     setIsSubmitting(true); // Gönderim başladığında true yap
 
     try {
       let response;
       if (editingTransaction) {
+        // Düzenleme modunda ise UPDATE yap
         response = await api.put(`${API_BASE_URL}/hesapHareket/hesapHareket-update`, transactionObj);
       } else {
+        // Yeni işlem ise CREATE yap (para girişi veya çıkışı farketmez)
         response = await api.post(`${API_BASE_URL}/hesapHareket/hesapHareket-create`, transactionObj);
       }
 
@@ -272,8 +274,10 @@ const TransactionModal = () => {
         updatedTransactions = updatedTransactions.filter((t) => t.id !== editingTransaction.id);
       }
 
-      // 8. Yeni işlemi ekle
-      updatedTransactions.push(newTransaction);
+      // 8. Yeni işlemi ekle (sadece yeni işlemse veya düzenleme modundaysa)
+      if (!editingTransaction || (editingTransaction && transactionToRemove)) {
+        updatedTransactions.push(newTransaction);
+      }
 
       // 9. Aktif durumdaki transaction'ları filtrele
       const activeTransactions = updatedTransactions.filter((t) => t.durumu === 1);
@@ -284,21 +288,6 @@ const TransactionModal = () => {
       const newBalance = totalCredit - totalDebit;
 
       console.log("Yeni bakiye:", newBalance);
-
-      // 11. Hesap bakiyesini API ile güncelle
-      await api.put(`${API_BASE_URL}/Hesap/hesap-update`, {
-        id: selectedUser.id,
-        tanim: selectedUser.tanim || selectedUser.userName,
-        hesapNo: selectedUser.hesapNo || selectedUser.accountNumber,
-        guncelBakiye: newBalance,
-        paraBirimi: selectedUser.paraBirimi || selectedUser.currency,
-        etiketRengi: selectedUser.etiketRengi || selectedUser.labelColor,
-        harcamaLimiti: selectedUser.harcamaLimiti || selectedUser.spendingLimit || 0,
-        guncellenmeTarihi: new Date().toISOString(),
-        hesapKategoriId: selectedUser.hesapKategoriId || 1,
-        durumu: 1,
-        aktif: 1,
-      });
 
       // 12. Yerel state'i güncelle
       updatedTransactions.sort((a, b) =>

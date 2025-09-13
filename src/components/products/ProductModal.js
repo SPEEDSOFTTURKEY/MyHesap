@@ -17,7 +17,7 @@ import OtherInfo from "./OtherInfo";
 import Images from "./Images";
 import api from "../../api/api";
 
-const API_BASE_URL = "https://speedsofttest.com/api";
+const API_BASE_URL = "https://localhost:44375/api";
 
 const ProductModal = ({
   visible,

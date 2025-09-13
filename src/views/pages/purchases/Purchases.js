@@ -14,7 +14,7 @@ import PurchasesCard from "../../../components/purchases/PurchasesCard";
 import SupplierModal from "../../../components/purchases/SupplierModal";
 import api from "../../../api/api";
 import ErrorBoundary from "../products/ErrorBoundary";
-const API_BASE_URL = "https://speedsofttest.com/api";
+const API_BASE_URL = "https://localhost:44375/api";
 
 const Purchases = () => {
   const [toasts, setToasts] = useState([]);

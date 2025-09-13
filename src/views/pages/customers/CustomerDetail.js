@@ -37,7 +37,7 @@ import { cilPen, cilPlus, cilTrash, cilBan } from "@coreui/icons";
 import CustomerModal from "../../../components/customers/CustomerModal";
 import api from "../../../api/api";
 
-const API_BASE_URL = "https://speedsofttest.com/api";
+const API_BASE_URL = "https://localhost:44375/api";
 const KULLANICI_ID = 1; // Bu değeri session, context veya props'tan almalısınız
 
 const CustomerDetail = () => {

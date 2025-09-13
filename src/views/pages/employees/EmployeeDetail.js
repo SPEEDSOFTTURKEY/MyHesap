@@ -24,7 +24,7 @@ import EmployeeActions from "../../../components/employees/EmployeeActions";
 import EmployeeTable from "../../../components/employees/EmployeeTable";
 import EmployeeModals from "../../../components/employees/EmployeeModals";
 
-const API_BASE_URL = "https://speedsofttest.com/api";
+const API_BASE_URL = "https://localhost:44375/api";
 
 const accountCategories = [
   { categoryId: 1, accountName: "Banka Hesapları", type: "bank" },

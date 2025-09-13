@@ -34,7 +34,7 @@ import {
 import ProductTable from "../../../components/products/ProductTable";
 import api from "../../../api/api";
 import ErrorBoundary from "./ErrorBoundary";
-const API_BASE_URL = "https://speedsofttest.com/api";
+const API_BASE_URL = "https://localhost:44375/api";
 
 const Products = () => {
   const [toasts, setToasts] = useState([]);
