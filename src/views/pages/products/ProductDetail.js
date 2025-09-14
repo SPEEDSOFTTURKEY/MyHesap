@@ -144,6 +144,7 @@ const ProductDetail = () => {
       categoryId: apiProduct.urunKategoriId || 0,
       brandId: apiProduct.urunMarkaId || 0,
       shelfId: apiProduct.urunRafId || 0,
+      depoId:apiProduct.depoId || 0,
       productCode: apiProduct.urunKodu,
       gtip: apiProduct.gtipKodu,
       countryCode: apiProduct.ulkeId?.toString() || "",

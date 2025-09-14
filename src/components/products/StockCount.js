@@ -29,7 +29,6 @@ const StockCount = () => {
   const { state } = useLocation();
   const navigate = useNavigate();
   const [product, setProduct] = useState(state?.product || null);
-  const [depolar, setDepolar] = useState([]);
   const [stoklar, setStoklar] = useState([]);
   const [sayilanMiktarlar, setSayilanMiktarlar] = useState({});
   const [loading, setLoading] = useState(false);
@@ -75,22 +74,9 @@ const StockCount = () => {
         if (productResponse.data.durumu !== 1) {
           throw new Error("Ürün bulunamadı veya aktif değil.");
         }
-        // ProductDetail'daki gibi mapApiProductToLocal ile eşleştir
         const mappedProduct = mapApiProductToLocal(productResponse.data);
         setProduct(mappedProduct);
       }
-
-      console.log("Fetching all depots");
-      const depoResponse = await api.get(
-        `${API_BASE_URL}/depo/get-all`,
-      );
-      console.log("API Response from /depo/get-all:", depoResponse);
-      console.log("Raw depo data from API (depo/get-all):", depoResponse.data);
-      
-      const activeDepolar = Array.isArray(depoResponse.data)
-        ? depoResponse.data.filter((depo) => depo.durumu === 1)
-        : [];
-      setDepolar(activeDepolar);
 
       console.log("Fetching stock data for urunId:", urunId);
       const stockResponse = await api.get(
@@ -172,10 +158,7 @@ const StockCount = () => {
   const handleSave = async () => {
     try {
       setLoading(true);
-      
-      // Kullanıcı ID'sini al
       const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
-      
       const payload = {
         urunId: parseInt(urunId),
         kullaniciId: user.id,
@@ -347,28 +330,23 @@ const StockCount = () => {
                   </CTableRow>
                 </CTableHead>
                 <CTableBody>
-                  {depolar.map((depo) => {
-                    const stok = stoklar.find((s) => s.depoId === depo.id) || {
-                      miktar: 0,
-                    };
-                    return (
-                      <CTableRow key={depo.id}>
-                        <CTableDataCell>{depo.adi}</CTableDataCell>
-                        <CTableDataCell>{stok.miktar}</CTableDataCell>
-                        <CTableDataCell>
-                          <CFormInput
-                            type="number"
-                            value={sayilanMiktarlar[depo.id] || 0}
-                            onChange={(e) =>
-                              handleMiktarChange(depo.id, e.target.value)
-                            }
-                            min="0"
-                            style={{ width: "100px" }}
-                          />
-                        </CTableDataCell>
-                      </CTableRow>
-                    );
-                  })}
+                  {stoklar.map((stock) => (
+                    <CTableRow key={stock.depoId}>
+                      <CTableDataCell>{stock.depo?.adi || "Bilinmeyen Depo"}</CTableDataCell>
+                      <CTableDataCell>{stock.miktar}</CTableDataCell>
+                      <CTableDataCell>
+                        <CFormInput
+                          type="number"
+                          value={sayilanMiktarlar[stock.depoId] || 0}
+                          onChange={(e) =>
+                            handleMiktarChange(stock.depoId, e.target.value)
+                          }
+                          min="0"
+                          style={{ width: "100px" }}
+                        />
+                      </CTableDataCell>
+                    </CTableRow>
+                  ))}
                 </CTableBody>
               </CTable>
             </CCardBody>

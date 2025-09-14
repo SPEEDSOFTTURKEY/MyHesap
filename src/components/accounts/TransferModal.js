@@ -304,8 +304,8 @@ const TransferModal = () => {
           // Delete old transactions
           try {
             await Promise.all([
-              api.delete(`${API_BASE_URL}/hesapHareket/hesapHareket-delete/${senderTransactionToRemove.id}`),
-              api.delete(`${API_BASE_URL}/hesapHareket/hesapHareket-delete/${recipientTransactionToRemove.id}`),
+              api.delete(`${API_BASE_URL}/hesapHareket/${senderTransactionToRemove.id}`),
+              api.delete(`${API_BASE_URL}/hesapHareket/hesapHareket-deletee/${recipientTransactionToRemove.id}`),
             ]);
             console.log("Old transactions deleted successfully");
           } catch (deleteError) {
@@ -410,10 +410,10 @@ const TransferModal = () => {
       // Save new transactions
       const [senderResponse, recipientResponse] = await Promise.all([
         editingTransaction
-          ? api.put(`${API_BASE_URL}/hesapHareket/hesapHareket-update`, senderTransactionObj)
+          ? api.put(`${API_BASE_URL}/hesapHareket/hesapHareket-updatee`, senderTransactionObj)
           : api.post(`${API_BASE_URL}/hesapHareket/hesapHareket-create`, senderTransactionObj),
         editingTransaction
-          ? api.put(`${API_BASE_URL}/hesapHareket/hesapHareket-update`, recipientTransactionObj)
+          ? api.put(`${API_BASE_URL}/hesapHareket/hesapHareket-updatee`, recipientTransactionObj)
           : api.post(`${API_BASE_URL}/hesapHareket/hesapHareket-create`, recipientTransactionObj),
       ]);
 

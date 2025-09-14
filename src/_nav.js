@@ -82,12 +82,12 @@ const _nav = [
     to: "/app/suppliers",
     icon: <CIcon icon={cilBarChart} customClassName="nav-icon" />,
   },
-  //  {
-  //    component: CNavItem,
-  //    name: "Satışlar",
-  //    to: "/app/sales",
-  //   icon: <CIcon icon={cilCart} customClassName="nav-icon" />,
-  //  },
+   {
+     component: CNavItem,
+     name: "Satışlar",
+     to: "/app/sales",
+   icon: <CIcon icon={cilCart} customClassName="nav-icon" />,
+  },
   {
     component: CNavItem,
     name: "Alışlar",

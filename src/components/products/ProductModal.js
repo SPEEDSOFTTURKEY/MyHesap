@@ -34,6 +34,7 @@ const ProductModal = ({
     categoryId: product?.categoryId || "",
     brandId: product?.brandId || "",
     shelfId: product?.shelfId || "",
+    depoId:product?.depoId || "",
     salePrice: product?.salePrice ? String(product.salePrice) : "",
     saleCurrency: product?.saleCurrency || "TRY",
     purchaseCurrency: product?.purchaseCurrency || "TRY",
@@ -142,6 +143,8 @@ const ProductModal = ({
       );
       productFormData.append("UrunMarkaId", parseInt(formData.brandId) || 0);
       productFormData.append("UrunRafId", parseInt(formData.shelfId) || 0);
+            productFormData.append("DepoId", parseInt(formData.depoId) || 0);
+
       productFormData.append("UrunKodu", formData.productCode || "");
       productFormData.append("GTIPKodu", formData.gtip || "");
       productFormData.append("UlkeId", parseInt(formData.countryCode) || 0);
@@ -211,6 +214,12 @@ const ProductModal = ({
             );
             shelfName = res.data.adi || "";
           }
+             if (formData.depoId) {
+            const res = await api.get(
+              `${API_BASE_URL}/depo/depo-get-by-id/${formData.depoId}`,
+            );
+            shelfName = res.data.adi || "";
+          }
         } catch (err) {
           console.error("Error fetching names:", err);
           addToast("Kategori, marka veya raf isimleri alınamadı.", "error");
@@ -224,6 +233,7 @@ const ProductModal = ({
           categoryId: parseInt(formData.categoryId) || 0,
           brandId: parseInt(formData.brandId) || 0,
           shelfId: parseInt(formData.shelfId) || 0,
+          depoId:parseInt(formData.depoId) || 0,
           category: categoryName,
           brand: brandName,
           shelfLocation: shelfName,

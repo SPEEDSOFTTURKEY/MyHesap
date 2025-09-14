@@ -57,6 +57,7 @@ const ProductNew = () => {
     description: "",
     barcode: "",
     shelfId: "",
+    depoId:"",
     trackStock: false,
     criticalStock: "",
     tags: "",
@@ -298,6 +299,8 @@ const ProductNew = () => {
       productFormData.append("Aciklama", formData.description || "");
       productFormData.append("Barkod", formData.barcode || "");
       productFormData.append("UrunRafId", parseInt(formData.shelfId) || 0);
+            productFormData.append("DepoId", parseInt(formData.depoId) || 0);
+
       productFormData.append(
         "StokTakip",
         formData.trackStock ? "Evet" : "Hayır",

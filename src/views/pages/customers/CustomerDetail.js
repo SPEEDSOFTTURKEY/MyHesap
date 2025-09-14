@@ -71,8 +71,11 @@ const CustomerDetail = () => {
     miktar: "",
     toplamFiyat: "",
     musteriId: id,
+    urunId: "",
+    depoId: "",
   });
   const [saleItems, setSaleItems] = useState([]);
+  const [depots, setDepots] = useState({}); // Product ID to depot list mapping
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [toasts, setToasts] = useState([]);
@@ -249,6 +252,29 @@ const CustomerDetail = () => {
     }
   };
 
+  // Ürün için depoları getir
+  const fetchDepotsForProduct = async (urunId) => {
+    try {
+      const { data } = await api.get(`${API_BASE_URL}/urun/urun-depolardaki-stoklar/${urunId}`);
+      if (Array.isArray(data)) {
+        const activeDepots = data.filter((stock) => stock.durumu === 1);
+        setDepots((prev) => ({
+          ...prev,
+          [urunId]: activeDepots,
+        }));
+      } else {
+        throw new Error("Depo verisi dizi formatında değil.");
+      }
+    } catch (err) {
+      console.error("Depoları Getirme Hatası:", err);
+      addToast(`Ürün ID ${urunId} için depolar yüklenemedi.`, "error");
+      setDepots((prev) => ({
+        ...prev,
+        [urunId]: [],
+      }));
+    }
+  };
+
   // Debounce yardımcı fonksiyonu
   const debounce = (func, wait) => {
     let timeout;
@@ -282,7 +308,10 @@ const CustomerDetail = () => {
             ? (parseFloat(prev.miktar) * product.satisFiyat).toFixed(2)
             : product.satisFiyat.toString(),
           musteriId: id,
+          urunId: product.id.toString(),
+          depoId: "",
         }));
+        await fetchDepotsForProduct(product.id);
         if (product.stokMiktari !== undefined && product.stokMiktari <= 0) {
           addToast("Uyarı: Bu ürün stokta yok!", "warning");
         } else if (
@@ -408,9 +437,10 @@ const CustomerDetail = () => {
       !saleFormData.barkod ||
       !saleFormData.urunAdi ||
       !saleFormData.fiyat ||
-      !saleFormData.miktar
+      !saleFormData.miktar ||
+      !saleFormData.depoId
     ) {
-      addToast("Tüm alanlar doldurulmalıdır.", "error");
+      addToast("Tüm alanlar (barkod, ürün adı, fiyat, miktar, depo) doldurulmalıdır.", "error");
       return;
     }
     if (
@@ -422,6 +452,10 @@ const CustomerDetail = () => {
       addToast("Fiyat ve miktar pozitif sayılar olmalıdır.", "error");
       return;
     }
+    if (saleItems.some((item) => item.barkod === saleFormData.barkod && item.depoId === saleFormData.depoId)) {
+      addToast("Bu ürün ve depo kombinasyonu zaten eklenmiş.", "error");
+      return;
+    }
 
     const newItem = {
       id: Date.now(),
@@ -430,9 +464,11 @@ const CustomerDetail = () => {
       fiyat: parseFloat(saleFormData.fiyat),
       birim: saleFormData.birim,
       miktar: parseFloat(saleFormData.miktar),
-      toplamFiyat:
-        parseFloat(saleFormData.fiyat) * parseFloat(saleFormData.miktar),
+      toplamFiyat: parseFloat(saleFormData.fiyat) * parseFloat(saleFormData.miktar),
       musteriId: id,
+      kullaniciId: KULLANICI_ID,
+      depoId: parseInt(saleFormData.depoId),
+      urunId: parseInt(saleFormData.urunId),
     };
 
     setSaleItems((prev) => [...prev, newItem]);
@@ -444,7 +480,10 @@ const CustomerDetail = () => {
       miktar: "",
       toplamFiyat: "",
       musteriId: id,
+      urunId: "",
+      depoId: "",
     });
+    setDepots((prev) => ({ ...prev, [newItem.urunId]: prev[newItem.urunId] }));
     addToast("Ürün sepete eklendi.", "success");
 
     setTimeout(() => {
@@ -456,6 +495,15 @@ const CustomerDetail = () => {
   const handleDeleteSaleItem = (itemId) => {
     setSaleItems((prev) => prev.filter((item) => item.id !== itemId));
     addToast("Ürün silindi.", "success");
+  };
+
+  // Depo değişikliğini yönet
+  const handleDepotChange = (index, depoId) => {
+    setSaleItems((prev) =>
+      prev.map((item, i) =>
+        i === index ? { ...item, depoId: parseInt(depoId) } : item
+      )
+    );
   };
 
   // Toplam fiyat hesaplama
@@ -471,6 +519,10 @@ const CustomerDetail = () => {
       addToast("En az bir ürün ekleyin.", "error");
       return;
     }
+    if (saleItems.some((item) => !item.depoId)) {
+      addToast("Tüm ürünler için bir depo seçilmelidir.", "error");
+      return;
+    }
     setLoading(true);
     try {
       const payload = saleItems.map((item) => ({
@@ -482,6 +534,7 @@ const CustomerDetail = () => {
         toplamFiyat: item.toplamFiyat,
         musteriId: parseInt(id),
         kullaniciId: KULLANICI_ID,
+        depoId: item.depoId,
       }));
       await api.post(
         `${API_BASE_URL}/musteriSatis/musteriSatis-create`,
@@ -490,6 +543,7 @@ const CustomerDetail = () => {
       addToast("Satış(lar) kaydedildi.", "success");
       setShowSaleModal(false);
       setSaleItems([]);
+      setDepots({});
       fetchSales();
     } catch (err) {
       addToast(err.response?.data?.message || "Satış kaydedilemedi.", "error");
@@ -510,7 +564,15 @@ const CustomerDetail = () => {
       miktar: sale.miktar.toString(),
       toplamFiyat: sale.toplamFiyat.toString(),
       musteriId: id,
+      urunId: products.find((p) => p.barkod === sale.barkod)?.id.toString() || "",
+      depoId: sale.depoId?.toString() || "",
     });
+    if (sale.barkod) {
+      const product = products.find((p) => p.barkod === sale.barkod);
+      if (product) {
+        fetchDepotsForProduct(product.id);
+      }
+    }
     setShowSaleUpdateModal(true);
   };
 
@@ -522,7 +584,7 @@ const CustomerDetail = () => {
     }));
 
     if (name === "fiyat" || name === "miktar") {
-      const fiyat = parseFloat(saleFormData.fiyat) || 0;
+      const fiyat = name === "fiyat" ? parseFloat(value) || 0 : parseFloat(saleFormData.fiyat) || 0;
       const miktar = name === "miktar" ? parseFloat(value) || 0 : parseFloat(saleFormData.miktar) || 0;
       const toplamFiyat = (fiyat * miktar).toFixed(2);
       setSaleFormData((prev) => ({
@@ -534,6 +596,25 @@ const CustomerDetail = () => {
     if (name === "barkod") {
       handleBarcodeChange(value);
     }
+    if (name === "urunId") {
+      const product = products.find((p) => p.id === parseInt(value));
+      if (product) {
+        setSaleFormData((prev) => ({
+          ...prev,
+          urunId: value,
+          barkod: product.barkod,
+          urunAdi: product.adi,
+          fiyat: product.satisFiyat.toString(),
+          birim: product.birimAdi || "adet",
+          miktar: prev.miktar || "1",
+          toplamFiyat: prev.miktar
+            ? (parseFloat(prev.miktar) * product.satisFiyat).toFixed(2)
+            : product.satisFiyat.toString(),
+          depoId: "",
+        }));
+        fetchDepotsForProduct(product.id);
+      }
+    }
   };
 
   const handleUpdateSale = async () => {
@@ -541,9 +622,10 @@ const CustomerDetail = () => {
       !saleFormData.barkod ||
       !saleFormData.urunAdi ||
       !saleFormData.fiyat ||
-      !saleFormData.miktar
+      !saleFormData.miktar ||
+      !saleFormData.depoId
     ) {
-      addToast("Tüm alanlar doldurulmalıdır.", "error");
+      addToast("Tüm alanlar (barkod, ürün adı, fiyat, miktar, depo) doldurulmalıdır.", "error");
       return;
     }
     setLoading(true);
@@ -558,6 +640,7 @@ const CustomerDetail = () => {
         toplamFiyat: parseFloat(saleFormData.toplamFiyat),
         musteriId: parseInt(id),
         kullaniciId: KULLANICI_ID,
+        depoId: parseInt(saleFormData.depoId),
       };
       await api.put(
         `${API_BASE_URL}/musteriSatis/musteriSatis-update`,
@@ -565,6 +648,7 @@ const CustomerDetail = () => {
       );
       addToast("Satış güncellendi.", "success");
       setShowSaleUpdateModal(false);
+      setDepots({});
       fetchSales();
     } catch (err) {
       addToast(err.response?.data?.message || "Satış güncellenemedi.", "error");
@@ -1236,6 +1320,21 @@ const CustomerDetail = () => {
           <CForm>
             <CRow className="mb-3">
               <CCol md={6}>
+                <CFormLabel>Ürün Seç</CFormLabel>
+                <CFormSelect
+                  name="urunId"
+                  value={saleFormData.urunId}
+                  onChange={handleSaleFormChange}
+                >
+                  <option value="">Ürün Seçin</option>
+                  {products.map((product) => (
+                    <option key={product.id} value={product.id}>
+                      {product.adi} (Barkod: {product.barkod}, Fiyat: {product.satisFiyat})
+                    </option>
+                  ))}
+                </CFormSelect>
+              </CCol>
+              <CCol md={6}>
                 <CFormLabel>Barkod</CFormLabel>
                 <CFormInput
                   name="barkod"
@@ -1243,6 +1342,8 @@ const CustomerDetail = () => {
                   onChange={handleSaleFormChange}
                 />
               </CCol>
+            </CRow>
+            <CRow className="mb-3">
               <CCol md={6}>
                 <CFormLabel>Ürün Adı</CFormLabel>
                 <CFormInput
@@ -1250,6 +1351,22 @@ const CustomerDetail = () => {
                   value={saleFormData.urunAdi}
                   onChange={handleSaleFormChange}
                 />
+              </CCol>
+              <CCol md={6}>
+                <CFormLabel>Depo</CFormLabel>
+                <CFormSelect
+                  name="depoId"
+                  value={saleFormData.depoId}
+                  onChange={handleSaleFormChange}
+                >
+                  <option value="">Depo Seçin</option>
+                  {saleFormData.urunId &&
+                    depots[saleFormData.urunId]?.map((depot) => (
+                      <option key={depot.depoId} value={depot.depoId}>
+                        {depot.depo?.adi || "Bilinmeyen Depo"} (Stok: {depot.miktar})
+                      </option>
+                    ))}
+                </CFormSelect>
               </CCol>
             </CRow>
             <CRow className="mb-3">
@@ -1311,31 +1428,48 @@ const CustomerDetail = () => {
                   <CTableHeaderCell>Ürün Adı</CTableHeaderCell>
                   <CTableHeaderCell>Fiyat</CTableHeaderCell>
                   <CTableHeaderCell>Birim</CTableHeaderCell>
+                  <CTableHeaderCell>Depo</CTableHeaderCell>
                   <CTableHeaderCell>Miktar</CTableHeaderCell>
                   <CTableHeaderCell>Toplam Fiyat</CTableHeaderCell>
                   <CTableHeaderCell>İşlemler</CTableHeaderCell>
                 </CTableRow>
               </CTableHead>
               <CTableBody>
-                {saleItems.map((item) => (
-                  <CTableRow key={item.id}>
-                    <CTableDataCell>{item.barkod}</CTableDataCell>
-                    <CTableDataCell>{item.urunAdi}</CTableDataCell>
-                    <CTableDataCell>{item.fiyat}</CTableDataCell>
-                    <CTableDataCell>{item.birim}</CTableDataCell>
-                    <CTableDataCell>{item.miktar}</CTableDataCell>
-                    <CTableDataCell>{item.toplamFiyat}</CTableDataCell>
-                    <CTableDataCell>
-                      <CButton
-                        color="danger"
-                        size="sm"
-                        onClick={() => handleDeleteSaleItem(item.id)}
-                      >
-                        Sil
-                      </CButton>
-                    </CTableDataCell>
-                  </CTableRow>
-                ))}
+                {saleItems.map((item, index) => {
+                  const productDepots = item.urunId ? depots[item.urunId] || [] : [];
+                  return (
+                    <CTableRow key={item.id}>
+                      <CTableDataCell>{item.barkod}</CTableDataCell>
+                      <CTableDataCell>{item.urunAdi}</CTableDataCell>
+                      <CTableDataCell>{item.fiyat}</CTableDataCell>
+                      <CTableDataCell>{item.birim}</CTableDataCell>
+                      <CTableDataCell>
+                        <CFormSelect
+                          value={item.depoId}
+                          onChange={(e) => handleDepotChange(index, e.target.value)}
+                        >
+                          <option value="">Depo Seçin</option>
+                          {productDepots.map((depo) => (
+                            <option key={depo.depoId} value={depo.depoId}>
+                              {depo.depo?.adi || "Bilinmeyen Depo"} (Stok: {depo.miktar})
+                            </option>
+                          ))}
+                        </CFormSelect>
+                      </CTableDataCell>
+                      <CTableDataCell>{item.miktar}</CTableDataCell>
+                      <CTableDataCell>{item.toplamFiyat}</CTableDataCell>
+                      <CTableDataCell>
+                        <CButton
+                          color="danger"
+                          size="sm"
+                          onClick={() => handleDeleteSaleItem(item.id)}
+                        >
+                          Sil
+                        </CButton>
+                      </CTableDataCell>
+                    </CTableRow>
+                  );
+                })}
               </CTableBody>
             </CTable>
             <CRow>
@@ -1352,7 +1486,7 @@ const CustomerDetail = () => {
           <CButton
             color="primary"
             onClick={handleSaveSales}
-            disabled={loading || saleItems.length === 0}
+            disabled={loading || saleItems.length === 0 || saleItems.some((item) => !item.depoId)}
           >
             Satışı Kaydet
           </CButton>
@@ -1371,6 +1505,21 @@ const CustomerDetail = () => {
           <CForm>
             <CRow className="mb-3">
               <CCol md={6}>
+                <CFormLabel>Ürün Seç</CFormLabel>
+                <CFormSelect
+                  name="urunId"
+                  value={saleFormData.urunId}
+                  onChange={handleSaleFormChange}
+                >
+                  <option value="">Ürün Seçin</option>
+                  {products.map((product) => (
+                    <option key={product.id} value={product.id}>
+                      {product.adi} (Barkod: {product.barkod}, Fiyat: {product.satisFiyat})
+                    </option>
+                  ))}
+                </CFormSelect>
+              </CCol>
+              <CCol md={6}>
                 <CFormLabel>Barkod</CFormLabel>
                 <CFormInput
                   name="barkod"
@@ -1378,6 +1527,8 @@ const CustomerDetail = () => {
                   onChange={handleSaleFormChange}
                 />
               </CCol>
+            </CRow>
+            <CRow className="mb-3">
               <CCol md={6}>
                 <CFormLabel>Ürün Adı</CFormLabel>
                 <CFormInput
@@ -1385,6 +1536,22 @@ const CustomerDetail = () => {
                   value={saleFormData.urunAdi}
                   onChange={handleSaleFormChange}
                 />
+              </CCol>
+              <CCol md={6}>
+                <CFormLabel>Depo</CFormLabel>
+                <CFormSelect
+                  name="depoId"
+                  value={saleFormData.depoId}
+                  onChange={handleSaleFormChange}
+                >
+                  <option value="">Depo Seçin</option>
+                  {saleFormData.urunId &&
+                    depots[saleFormData.urunId]?.map((depot) => (
+                      <option key={depot.depoId} value={depot.depoId}>
+                        {depot.depo?.adi || "Bilinmeyen Depo"} (Stok: {depot.miktar})
+                      </option>
+                    ))}
+                </CFormSelect>
               </CCol>
             </CRow>
             <CRow className="mb-3">
@@ -1444,7 +1611,7 @@ const CustomerDetail = () => {
           <CButton
             color="primary"
             onClick={handleUpdateSale}
-            disabled={loading}
+            disabled={loading || !saleFormData.depoId}
           >
             Güncelle
           </CButton>

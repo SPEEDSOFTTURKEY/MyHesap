@@ -65,6 +65,7 @@ const Sales = () => {
   });
   const [saleItems, setSaleItems] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState("");
+  const [depots, setDepots] = useState({}); // Product ID to depot list mapping
   const [user] = useState({
     id: 1002,
     aktiflikDurumu: 1,
@@ -129,6 +130,29 @@ const Sales = () => {
     }
   }, [addToast]);
 
+  // Ürün için depoları getir
+  const fetchDepotsForProduct = useCallback(async (urunId) => {
+    try {
+      const { data } = await api.get(`${API_BASE_URL}/urun/urun-depolardaki-stoklar/${urunId}`);
+      if (Array.isArray(data)) {
+        const activeDepots = data.filter((stock) => stock.durumu === 1);
+        setDepots((prev) => ({
+          ...prev,
+          [urunId]: activeDepots,
+        }));
+      } else {
+        throw new Error("Depo verisi dizi formatında değil.");
+      }
+    } catch (err) {
+      console.error("Depoları Getirme Hatası:", err);
+      addToast(`Ürün ID ${urunId} için depolar yüklenemedi.`, "error");
+      setDepots((prev) => ({
+        ...prev,
+        [urunId]: [],
+      }));
+    }
+  }, [addToast]);
+
   // Component mount olduğunda satışları ve müşterileri getir
   useEffect(() => {
     console.log("Giriş yapan kullanıcı bilgileri:", user);
@@ -181,6 +205,8 @@ const Sales = () => {
       addToast("Bu ürün zaten eklenmiş.", "error");
       return;
     }
+    // Fetch depots for the selected product
+    fetchDepotsForProduct(product.id);
     setSaleItems((prev) => [
       ...prev,
       {
@@ -190,6 +216,7 @@ const Sales = () => {
         birim: product.birimAdi,
         miktar: 1,
         toplamFiyat: product.satisFiyat,
+        depoId: "", // Initially empty, user will select
       },
     ]);
     setSelectedProduct("");
@@ -205,6 +232,20 @@ const Sales = () => {
               ...item,
               miktar: quantity,
               toplamFiyat: quantity * item.fiyat,
+            }
+          : item
+      )
+    );
+  };
+
+  // Satış kalemi deposunu değiştir
+  const handleDepotChange = (index, depoId) => {
+    setSaleItems((prev) =>
+      prev.map((item, i) =>
+        i === index
+          ? {
+              ...item,
+              depoId: depoId,
             }
           : item
       )
@@ -231,6 +272,10 @@ const Sales = () => {
         addToast("En az bir ürün eklenmeli.", "error");
         return;
       }
+      if (saleItems.some((item) => !item.depoId)) {
+        addToast("Tüm ürünler için bir depo seçilmelidir.", "error");
+        return;
+      }
       if (!user.id) {
         addToast("Kullanıcı ID'si eksik.", "error");
         return;
@@ -245,7 +290,7 @@ const Sales = () => {
         adres: newCustomer.adres || "",
         durumu: 1,
         aktif: 1,
-        kullaniciId: user.id, // Kullanıcı ID'si ekleniyor
+        kullaniciId: user.id,
       };
 
       const customerResponse = await api.post(`${API_BASE_URL}/musteri/musteri-create`, customerData);
@@ -259,7 +304,8 @@ const Sales = () => {
         birim: item.birim,
         miktar: item.miktar,
         toplamFiyat: item.toplamFiyat,
-        kullaniciId: user.id, // Kullanıcı ID'si ekleniyor
+        kullaniciId: user.id,
+        depoId: parseInt(item.depoId),
       }));
 
       console.log("Gönderilen satış verisi:", saleData);
@@ -288,6 +334,10 @@ const Sales = () => {
       addToast("En az bir ürün eklenmeli.", "error");
       return;
     }
+    if (saleItems.some((item) => !item.depoId)) {
+      addToast("Tüm ürünler için bir depo seçilmelidir.", "error");
+      return;
+    }
     if (!user.id) {
       addToast("Kullanıcı ID'si eksik.", "error");
       return;
@@ -302,7 +352,8 @@ const Sales = () => {
         birim: item.birim,
         miktar: item.miktar,
         toplamFiyat: item.toplamFiyat,
-        kullaniciId: user.id, // Kullanıcı ID'si ekleniyor
+        kullaniciId: user.id,
+        depoId: parseInt(item.depoId),
       }));
 
       console.log("Gönderilen satış verisi:", saleData);
@@ -579,35 +630,53 @@ const Sales = () => {
                   <CTableHeaderCell>Barkod</CTableHeaderCell>
                   <CTableHeaderCell>Fiyat</CTableHeaderCell>
                   <CTableHeaderCell>Birim</CTableHeaderCell>
+                  <CTableHeaderCell>Depo</CTableHeaderCell>
                   <CTableHeaderCell>Miktar</CTableHeaderCell>
                   <CTableHeaderCell>Toplam Fiyat</CTableHeaderCell>
                   <CTableHeaderCell>İşlem</CTableHeaderCell>
                 </CTableRow>
               </CTableHead>
               <CTableBody>
-                {saleItems.map((item, index) => (
-                  <CTableRow key={index}>
-                    <CTableDataCell>{item.urunAdi}</CTableDataCell>
-                    <CTableDataCell>{item.barkod}</CTableDataCell>
-                    <CTableDataCell>{item.fiyat}</CTableDataCell>
-                    <CTableDataCell>{item.birim}</CTableDataCell>
-                    <CTableDataCell>
-                      <CFormInput
-                        type="number"
-                        min="1"
-                        value={item.miktar}
-                        onChange={(e) => handleQuantityChange(index, e.target.value)}
-                        style={{ width: "100px" }}
-                      />
-                    </CTableDataCell>
-                    <CTableDataCell>{item.toplamFiyat}</CTableDataCell>
-                    <CTableDataCell>
-                      <CButton color="danger" onClick={() => removeSaleItem(index)}>
-                        Sil
-                      </CButton>
-                    </CTableDataCell>
-                  </CTableRow>
-                ))}
+                {saleItems.map((item, index) => {
+                  const product = products.find((p) => p.barkod === item.barkod);
+                  const productDepots = product ? depots[product.id] || [] : [];
+                  return (
+                    <CTableRow key={index}>
+                      <CTableDataCell>{item.urunAdi}</CTableDataCell>
+                      <CTableDataCell>{item.barkod}</CTableDataCell>
+                      <CTableDataCell>{item.fiyat}</CTableDataCell>
+                      <CTableDataCell>{item.birim}</CTableDataCell>
+                      <CTableDataCell>
+                        <CFormSelect
+                          value={item.depoId}
+                          onChange={(e) => handleDepotChange(index, e.target.value)}
+                        >
+                          <option value="">Depo Seçin</option>
+                          {productDepots.map((depot) => (
+                            <option key={depot.depoId} value={depot.depoId}>
+                              {depot.depo?.adi || "Bilinmeyen Depo"} (Stok: {depot.miktar})
+                            </option>
+                          ))}
+                        </CFormSelect>
+                      </CTableDataCell>
+                      <CTableDataCell>
+                        <CFormInput
+                          type="number"
+                          min="1"
+                          value={item.miktar}
+                          onChange={(e) => handleQuantityChange(index, e.target.value)}
+                          style={{ width: "100px" }}
+                        />
+                      </CTableDataCell>
+                      <CTableDataCell>{item.toplamFiyat}</CTableDataCell>
+                      <CTableDataCell>
+                        <CButton color="danger" onClick={() => removeSaleItem(index)}>
+                          Sil
+                        </CButton>
+                      </CTableDataCell>
+                    </CTableRow>
+                  );
+                })}
               </CTableBody>
             </CTable>
           </CForm>
@@ -619,7 +688,7 @@ const Sales = () => {
           <CButton
             color="primary"
             onClick={handleNewCustomerSaleSubmit}
-            disabled={saleItems.length === 0 || !newCustomer.unvani || !newCustomer.email}
+            disabled={saleItems.length === 0 || !newCustomer.unvani || !newCustomer.email || saleItems.some((item) => !item.depoId)}
           >
             Satışı Kaydet
           </CButton>
@@ -677,35 +746,53 @@ const Sales = () => {
                   <CTableHeaderCell>Barkod</CTableHeaderCell>
                   <CTableHeaderCell>Fiyat</CTableHeaderCell>
                   <CTableHeaderCell>Birim</CTableHeaderCell>
+                  <CTableHeaderCell>Depo</CTableHeaderCell>
                   <CTableHeaderCell>Miktar</CTableHeaderCell>
                   <CTableHeaderCell>Toplam Fiyat</CTableHeaderCell>
                   <CTableHeaderCell>İşlem</CTableHeaderCell>
                 </CTableRow>
               </CTableHead>
               <CTableBody>
-                {saleItems.map((item, index) => (
-                  <CTableRow key={index}>
-                    <CTableDataCell>{item.urunAdi}</CTableDataCell>
-                    <CTableDataCell>{item.barkod}</CTableDataCell>
-                    <CTableDataCell>{item.fiyat}</CTableDataCell>
-                    <CTableDataCell>{item.birim}</CTableDataCell>
-                    <CTableDataCell>
-                      <CFormInput
-                        type="number"
-                        min="1"
-                        value={item.miktar}
-                        onChange={(e) => handleQuantityChange(index, e.target.value)}
-                        style={{ width: "100px" }}
-                      />
-                    </CTableDataCell>
-                    <CTableDataCell>{item.toplamFiyat}</CTableDataCell>
-                    <CTableDataCell>
-                      <CButton color="danger" onClick={() => removeSaleItem(index)}>
-                        Sil
-                      </CButton>
-                    </CTableDataCell>
-                  </CTableRow>
-                ))}
+                {saleItems.map((item, index) => {
+                  const product = products.find((p) => p.barkod === item.barkod);
+                  const productDepots = product ? depots[product.id] || [] : [];
+                  return (
+                    <CTableRow key={index}>
+                      <CTableDataCell>{item.urunAdi}</CTableDataCell>
+                      <CTableDataCell>{item.barkod}</CTableDataCell>
+                      <CTableDataCell>{item.fiyat}</CTableDataCell>
+                      <CTableDataCell>{item.birim}</CTableDataCell>
+                      <CTableDataCell>
+                        <CFormSelect
+                          value={item.depoId}
+                          onChange={(e) => handleDepotChange(index, e.target.value)}
+                        >
+                          <option value="">Depo Seçin</option>
+                          {productDepots.map((depot) => (
+                            <option key={depot.depoId} value={depot.depoId}>
+                              {depot.depo?.adi || "Bilinmeyen Depo"} (Stok: {depot.miktar})
+                            </option>
+                          ))}
+                        </CFormSelect>
+                      </CTableDataCell>
+                      <CTableDataCell>
+                        <CFormInput
+                          type="number"
+                          min="1"
+                          value={item.miktar}
+                          onChange={(e) => handleQuantityChange(index, e.target.value)}
+                          style={{ width: "100px" }}
+                        />
+                      </CTableDataCell>
+                      <CTableDataCell>{item.toplamFiyat}</CTableDataCell>
+                      <CTableDataCell>
+                        <CButton color="danger" onClick={() => removeSaleItem(index)}>
+                          Sil
+                        </CButton>
+                      </CTableDataCell>
+                    </CTableRow>
+                  );
+                })}
               </CTableBody>
             </CTable>
           </CForm>
@@ -717,7 +804,7 @@ const Sales = () => {
           <CButton
             color="primary"
             onClick={handleRegisteredCustomerSaleSubmit}
-            disabled={saleItems.length === 0 || !selectedCustomer}
+            disabled={saleItems.length === 0 || !selectedCustomer || saleItems.some((item) => !item.depoId)}
           >
             Satışı Kaydet
           </CButton>

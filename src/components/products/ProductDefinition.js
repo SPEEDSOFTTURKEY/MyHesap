@@ -219,7 +219,7 @@ const ProductDefinition = ({ formData, handleChange, refreshTrigger }) => {
               ))}
             </CFormSelect>
             {error && <div style={errorStyle}>{error}</div>}
-          </div>
+          </div> 
         </CCol>
       </CRow>
     </div>

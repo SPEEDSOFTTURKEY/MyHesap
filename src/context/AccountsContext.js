@@ -457,8 +457,8 @@ export const AccountsProvider = ({ children }) => {
         newRecipientBalance = calculateBalanceAdjustment(recipientBalance, transaction, amount, true);
       }
 
-      await api.delete(`${API_BASE_URL}/hesapHareket/hesapHareket-delete/${transaction.id}`);
-      if (relatedTransaction) await api.delete(`${API_BASE_URL}/hesapHareket/hesapHareket-delete/${relatedTransaction.id}`);
+      await api.delete(`${API_BASE_URL}/hesapHareket/hesapHareket-deletee/${transaction.id}`);
+      if (relatedTransaction) await api.delete(`${API_BASE_URL}/hesapHareket/hesapHareket-deletee/${relatedTransaction.id}`);
 
       await updateAccountBalance(transaction.hesapId, newSenderBalance, senderResponse.data, currentUserId);
       if (isTransfer && recipientAccount) await updateAccountBalance(transaction.etkilenenHesapId, newRecipientBalance, recipientAccount, currentUserId);
@@ -513,8 +513,8 @@ export const AccountsProvider = ({ children }) => {
         return;
       }
 
-      await api.delete(`${API_BASE_URL}/hesapHareket/hesapHareket-delete/${transactionToDelete.id}`);
-      if (relatedTransaction) await api.delete(`${API_BASE_URL}/hesapHareket/hesapHareket-delete/${relatedTransaction.id}`);
+      await api.delete(`${API_BASE_URL}/hesapHareket/hesapHareket-deletee/${transactionToDelete.id}`);
+      if (relatedTransaction) await api.delete(`${API_BASE_URL}/hesapHareket/hesapHareket-deletee/${relatedTransaction.id}`);
 
       await updateAccountBalance(transactionToDelete.hesapId, newSenderBalance, senderResponse.data, currentUserId);
       if (isTransfer && recipientAccount) await updateAccountBalance(transactionToDelete.etkilenenHesapId, newRecipientBalance, recipientAccount, currentUserId);
@@ -936,10 +936,10 @@ export const AccountsProvider = ({ children }) => {
       };
 
       const senderResponse = editingTransaction
-        ? await api.put(`${API_BASE_URL}/hesapHareket/hesapHareket-update`, senderTransactionObj)
+        ? await api.put(`${API_BASE_URL}/hesapHareket/hesapHareket-updatee`, senderTransactionObj)
         : await api.post(`${API_BASE_URL}/hesapHareket/hesapHareket-create`, senderTransactionObj);
       const recipientResponse = recipientTransactionToRemove
-        ? await api.put(`${API_BASE_URL}/hesapHareket/hesapHareket-update`, recipientTransactionObj)
+        ? await api.put(`${API_BASE_URL}/hesapHareket/hesapHareket-updatee`, recipientTransactionObj)
         : await api.post(`${API_BASE_URL}/hesapHareket/hesapHareket-create`, recipientTransactionObj);
 
       await updateAccountBalance(sender.id, newSenderBalance, accountSenderResponse.data, currentUserId);

@@ -1,4 +1,4 @@
-// context/UserContext.js - Örnek implementasyon
+// context/UserContext.js - Düzeltilmiş versiyon
 import React, { createContext, useContext, useState, useEffect } from "react";
 
 const UserContext = createContext();
@@ -16,16 +16,16 @@ export const UserProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Sayfa yüklendiğinde localStorage'dan kullanıcı bilgilerini kontrol et
-    // const savedUser = localStorage.getItem('user');
-    // if (savedUser) {
-    //   try {
-    //     setUser(JSON.parse(savedUser));
-    //   } catch (error) {
-    //     console.error('Kullanıcı bilgileri okunamadı:', error);
-    //     localStorage.removeItem('user');
-    //   }
-    // }
+    // Sayfa yüklendiğinde localStorage'dan kullanıcı bilgilerini yükle
+    const savedUser = localStorage.getItem('user');
+    if (savedUser) {
+      try {
+        setUser(JSON.parse(savedUser));
+      } catch (error) {
+        console.error('Kullanıcı bilgileri okunamadı:', error);
+        localStorage.removeItem('user');
+      }
+    }
     setLoading(false);
   }, []);
 

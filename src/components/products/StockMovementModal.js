@@ -174,6 +174,7 @@ const StockMovementModal = ({
           aciklama: product.description,
           barkod: product.barcode,
           urunRafId: product.shelfId || 0,
+          depoId:product.depoId || 0,
           stokTakip: product.trackStock ? "Evet" : "Hayır",
           kritikStok: product.criticalStock,
           etiketler: product.tags.join(","),

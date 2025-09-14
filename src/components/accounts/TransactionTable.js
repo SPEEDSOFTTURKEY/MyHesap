@@ -256,7 +256,7 @@ const TransactionTable = () => {
           newRecipientBalance = recipientBalance + amount;
         }
 
-        // Silme işlemi
+        // Silme işlemi - kullaniciId parametresini doğru şekilde gönderiyoruz
         await api.delete(`${API_BASE_URL}/hesapHareket/hesapHareket-delete/${transactionToDelete.id}?kullaniciId=${userId}`);
         await api.delete(`${API_BASE_URL}/hesapHareket/hesapHareket-delete/${relatedTransaction.id}?kullaniciId=${userId}`);
       } else {
@@ -274,7 +274,7 @@ const TransactionTable = () => {
           return;
         }
 
-        // Silme işlemi
+        // Silme işlemi - kullaniciId parametresini doğru şekilde gönderiyoruz
         await api.delete(`${API_BASE_URL}/hesapHareket/hesapHareket-delete/${transactionToDelete.id}?kullaniciId=${userId}`);
       }
 
