@@ -153,7 +153,7 @@ const ProductSalesReport = () => {
           const matchDocumentStatus = !formData.documentStatus || item.durumu.toString() === formData.documentStatus;
           const matchWarehouse = !formData.warehouse || item.depo?.adi === formData.warehouse;
           const matchUser = formData.transactionType === "sales"
-            ? !formData.customer || item.musteri?.unvani === formData.customer
+            ? !formData.customer || item.musteris?.unvani === formData.customer
             : true;
 
           return (
@@ -256,7 +256,7 @@ const ProductSalesReport = () => {
               convertTurkishChars(item.urunAdi || "-"),
               item.barkod || "-",
               dayjs(item.eklenmeTarihi).format("DD/MM/YYYY"),
-              convertTurkishChars(item.musteri?.unvani || "-"),
+              convertTurkishChars(item.musteris?.unvani || "-"),
               item.miktar || 0,
               item.fiyat || 0,
               item.toplamFiyat || 0,
@@ -316,7 +316,7 @@ const ProductSalesReport = () => {
             Ürün: convertTurkishChars(item.urunAdi || "-"),
             Barkod: item.barkod || "-",
             Tarih: dayjs(item.eklenmeTarihi).format("DD/MM/YYYY"),
-            Müşteri: convertTurkishChars(item.musteri?.unvani || "-"),
+            Müşteri: convertTurkishChars(item.musteris?.unvani || "-"),
             Miktar: item.miktar || 0,
             "Birim Fiyat": item.fiyat || 0,
             Toplam: item.toplamFiyat || 0,
@@ -485,7 +485,7 @@ const ProductSalesReport = () => {
                       <CTableDataCell className="p-3">{convertTurkishChars(formData.transactionType === "purchases" ? item.urun?.adi || "-" : item.urunAdi || "-")}</CTableDataCell>
                       <CTableDataCell className="p-3">{formData.transactionType === "purchases" ? item.urun?.barkod || "-" : item.barkod || "-"}</CTableDataCell>
                       <CTableDataCell className="p-3">{dayjs(item.tarih || item.eklenmeTarihi).format("DD/MM/YYYY")}</CTableDataCell>
-                      <CTableDataCell className="p-3">{convertTurkishChars(formData.transactionType === "sales" ? item.musteri?.unvani || "-" : item.tedarikci?.unvan || "-")}</CTableDataCell>
+                      <CTableDataCell className="p-3">{convertTurkishChars(formData.transactionType === "sales" ? item.musteris?.unvani || "-" : item.tedarikci?.unvan || "-")}</CTableDataCell>
                       <CTableDataCell className="p-3">{item.miktar || 0}</CTableDataCell>
                       <CTableDataCell className="p-3">{item.fiyat || 0}</CTableDataCell>
                       <CTableDataCell className="p-3">{formData.transactionType === "purchases" ? item.toplam || 0 : item.toplamFiyat || 0}</CTableDataCell>

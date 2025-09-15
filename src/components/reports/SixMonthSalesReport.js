@@ -224,7 +224,7 @@ const SixMonthSalesReport = () => {
       item.id || "N/A",
       item.satisId || "N/A",
       item.eklenmeTarihi ? dayjs(item.eklenmeTarihi).format("DD/MM/YYYY") : "N/A",
-      convertTurkishChars(item.musteri?.unvani || item.musteriUnvani || "Bilinmeyen Müşteri"),
+      convertTurkishChars(item.musteris?.unvani || item.musteriUnvani || "Bilinmeyen Müşteri"),
       item.toplamFiyat ? `${item.toplamFiyat.toFixed(2).replace('.', ',')} ₺` : "0,00 ₺"
     ]) : [];
 
@@ -312,7 +312,7 @@ const SixMonthSalesReport = () => {
       ID: item.id || "N/A",
       "Satış ID": item.satisId || "N/A",
       Tarih: item.eklenmeTarihi ? dayjs(item.eklenmeTarihi).format("DD/MM/YYYY") : "N/A",
-      Müşteri: convertTurkishChars(item.musteri?.unvani || item.musteriUnvani || "Bilinmeyen Müşteri"),
+      Müşteri: convertTurkishChars(item.musteris?.unvani || item.musteriUnvani || "Bilinmeyen Müşteri"),
       Tutar: item.toplamFiyat ? `${item.toplamFiyat.toFixed(2).replace('.', ',')} ₺` : "0,00 ₺"
     })) : [];
 
@@ -400,7 +400,7 @@ const SixMonthSalesReport = () => {
                       <CTableDataCell>{item.id || "N/A"}</CTableDataCell>
                       <CTableDataCell>{item.satisId || "N/A"}</CTableDataCell>
                       <CTableDataCell>{item.eklenmeTarihi ? dayjs(item.eklenmeTarihi).format("DD/MM/YYYY") : "N/A"}</CTableDataCell>
-                      <CTableDataCell>{convertTurkishChars(item.musteri?.unvani || item.musteriUnvani || "Bilinmeyen Müşteri")}</CTableDataCell>
+                      <CTableDataCell>{convertTurkishChars(item.musteris?.unvani || item.musteriUnvani || "Bilinmeyen Müşteri")}</CTableDataCell>
                       <CTableDataCell>{item.toplamFiyat ? `${item.toplamFiyat.toFixed(2).replace('.', ',')} ₺` : "0,00 ₺"}</CTableDataCell>
                     </CTableRow>
                   ))}

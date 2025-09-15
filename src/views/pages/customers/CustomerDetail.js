@@ -38,7 +38,6 @@ import CustomerModal from "../../../components/customers/CustomerModal";
 import api from "../../../api/api";
 
 const API_BASE_URL = "https://localhost:44375/api";
-const KULLANICI_ID = 1; // Bu değeri session, context veya props'tan almalısınız
 
 const CustomerDetail = () => {
   const { id } = useParams();
@@ -86,6 +85,15 @@ const CustomerDetail = () => {
   const [selectedSale, setSelectedSale] = useState(null);
   const [products, setProducts] = useState([]);
   const [selectedSales, setSelectedSales] = useState([]); // Toplu iptal için seçili satışlar
+
+  // Hardcoded user state, similar to Sales component
+  const [user] = useState({
+    id: 1002,
+    aktiflikDurumu: 1,
+    durumu: 1,
+    yetkiId: 1,
+    kullaniciAdi: "gizem",
+  });
 
   // Toast bildirimi ekleme
   const addToast = useCallback((message, type = "success") => {
@@ -357,7 +365,7 @@ const CustomerDetail = () => {
         kodu: formData.kodu || "",
         aktif: formData.aktif ? 1 : 0,
         musteriId: parseInt(id),
-        KullaniciId: KULLANICI_ID,
+        kullaniciId: user.id,
       };
       const { data } = await api.post(
         `${API_BASE_URL}/sube/sube-create`,
@@ -401,7 +409,7 @@ const CustomerDetail = () => {
         kodu: formData.kodu || "",
         aktif: formData.aktif ? 1 : 0,
         musteriId: parseInt(id),
-        KullaniciId: KULLANICI_ID,
+        kullaniciId: user.id,
       };
       await api.put(`${API_BASE_URL}/sube/sube-update`, payload);
       addToast("Şube güncellendi.", "success");
@@ -419,7 +427,7 @@ const CustomerDetail = () => {
     setLoading(true);
     try {
       await api.delete(
-        `${API_BASE_URL}/sube/sube-delete/${branchId}?kullaniciId=${KULLANICI_ID}`
+        `${API_BASE_URL}/sube/sube-delete/${branchId}?kullaniciId=${user.id}`
       );
       addToast("Şube başarıyla silindi.", "success");
       await fetchBranches();
@@ -466,7 +474,7 @@ const CustomerDetail = () => {
       miktar: parseFloat(saleFormData.miktar),
       toplamFiyat: parseFloat(saleFormData.fiyat) * parseFloat(saleFormData.miktar),
       musteriId: id,
-      kullaniciId: KULLANICI_ID,
+      kullaniciId: user.id,
       depoId: parseInt(saleFormData.depoId),
       urunId: parseInt(saleFormData.urunId),
     };
@@ -533,7 +541,7 @@ const CustomerDetail = () => {
         miktar: item.miktar,
         toplamFiyat: item.toplamFiyat,
         musteriId: parseInt(id),
-        kullaniciId: KULLANICI_ID,
+        kullaniciId: user.id,
         depoId: item.depoId,
       }));
       await api.post(
@@ -639,7 +647,7 @@ const CustomerDetail = () => {
         miktar: parseFloat(saleFormData.miktar),
         toplamFiyat: parseFloat(saleFormData.toplamFiyat),
         musteriId: parseInt(id),
-        kullaniciId: KULLANICI_ID,
+        kullaniciId: user.id,
         depoId: parseInt(saleFormData.depoId),
       };
       await api.put(
@@ -669,7 +677,7 @@ const CustomerDetail = () => {
       await Promise.all(
         ids.map(async (satisId) => {
           await api.post(`${API_BASE_URL}/musteriSatis/musteriSatis-iptal`, null, {
-            params: { satisId, kullaniciId: KULLANICI_ID }
+            params: { satisId, kullaniciId: user.id }
           });
         })
       );
@@ -710,7 +718,7 @@ const CustomerDetail = () => {
     setLoading(true);
     try {
       await api.delete(
-        `${API_BASE_URL}/musteriSatis/musteriSatis-delete/${saleId}?kullaniciId=${KULLANICI_ID}`
+        `${API_BASE_URL}/musteriSatis/musteriSatis-delete/${saleId}?kullaniciId=${user.id}`
       );
       addToast("Satış silindi.", "success");
       fetchSales();
@@ -727,7 +735,7 @@ const CustomerDetail = () => {
     setLoading(true);
     try {
       await api.delete(
-        `${API_BASE_URL}/musteri/musteri-delete/${customer.id}?kullaniciId=${KULLANICI_ID}`
+        `${API_BASE_URL}/musteri/musteri-delete/${customer.id}?kullaniciId=${user.id}`
       );
       addToast("Müşteri silindi.", "success");
       navigate("/app/customers");
@@ -1312,7 +1320,7 @@ const CustomerDetail = () => {
       </CModal>
 
       {/* Satış Ekleme Modal */}
-      <CModal visible={showSaleModal} onClose={() => setShowSaleModal(false)}>
+      <CModal visible={showSaleModal} onClose={() => setShowSaleModal(false)} size="xl">
         <CModalHeader>
           <CModalTitle>Satış Yap</CModalTitle>
         </CModalHeader>
@@ -1497,6 +1505,7 @@ const CustomerDetail = () => {
       <CModal
         visible={showSaleUpdateModal}
         onClose={() => setShowSaleUpdateModal(false)}
+        size="xl"
       >
         <CModalHeader>
           <CModalTitle>Satış Güncelle</CModalTitle>

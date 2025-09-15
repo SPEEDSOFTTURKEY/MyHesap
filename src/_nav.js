@@ -1,30 +1,24 @@
 import { CNavGroup, CNavItem, CNavTitle } from "@coreui/react";
 import CIcon from "@coreui/icons-react";
 import {
-  cilSpeedometer,
   cilWallet,
   cilPeople,
   cilList,
   cilCreditCard,
   cilStorage,
-  cilChart,
-  cilUser,
-  cilApplicationsSettings,
-  cilExitToApp,
-  cibLaunchpad,
-  cilMoney,
   cilFile,
   cilSettings,
-  cilCart,
-  cilBarChart,
-  cibSuperuser,
   cilTruck,
-  cilExcerpt,
+  cilListRich,
+  cilMoney,
+  cilTransfer,
   cilMenu,
   cilFax,
-  cilTransfer,
+  cilBarChart,
+  cilExitToApp,
+  cibLaunchpad,
+  cibSuperuser,
   cibCcVisa,
-  cilListRich,
 } from "@coreui/icons";
 
 const _nav = [
@@ -82,12 +76,6 @@ const _nav = [
     to: "/app/suppliers",
     icon: <CIcon icon={cilBarChart} customClassName="nav-icon" />,
   },
-   {
-     component: CNavItem,
-     name: "Satışlar",
-     to: "/app/sales",
-   icon: <CIcon icon={cilCart} customClassName="nav-icon" />,
-  },
   {
     component: CNavItem,
     name: "Alışlar",
@@ -143,18 +131,6 @@ const _nav = [
         to: "/app/users",
         icon: <CIcon icon={cilPeople} customClassName="nav-icon" />,
       },
-      // {
-      //   component: CNavItem,
-      //   name: "Üyelik Detayları",
-      //   to: "/app/membership-detail",
-      //   icon: <CIcon icon={cilUser} customClassName="nav-icon" />,
-      // },
-      // {
-      //   component: CNavItem,
-      //   name: "Tanımlar",
-      //   to: "/app/definitions",
-      //   icon: <CIcon icon={cilExcerpt} customClassName="nav-icon" />,
-      // },
       {
         component: CNavItem,
         name: "Menu Düzeni",

@@ -121,9 +121,9 @@ const CustomerTurnoversReport = () => {
       ],
       ...salesData.map((item) => [
         item.eklenmeTarihi ? new Date(item.eklenmeTarihi).toLocaleDateString("tr-TR") : "-",
-        item.musteri?.unvani || "-",
-        item.musteri?.telefon || "-",
-        item.musteri?.adres || "-",
+        item.musteris?.unvani || "-",
+        item.musteris?.telefon || "-",
+        item.musteris?.adres || "-",
         item.urunAdi || "-",
         item.birim || "-",
         item.miktar || 0,
@@ -177,9 +177,9 @@ const CustomerTurnoversReport = () => {
     ];
     const tableRows = salesData.map((item) => [
       item.eklenmeTarihi ? new Date(item.eklenmeTarihi).toLocaleDateString("tr-TR") : "-",
-      item.musteri?.unvani || "-",
-      item.musteri?.telefon || "-",
-      item.musteri?.adres || "-",
+      item.musteris?.unvani || "-",
+      item.musteris?.telefon || "-",
+      item.musteris?.adres || "-",
       item.urunAdi || "-",
       item.birim || "-",
       item.miktar || 0,
@@ -337,13 +337,13 @@ const CustomerTurnoversReport = () => {
                         : "-"}
                     </CTableDataCell>
                     <CTableDataCell style={{ padding: "13px" }}>
-                      {item.musteri?.unvani || "-"}
+                      {item.musteris?.unvani || "-"}
                     </CTableDataCell>
                     <CTableDataCell style={{ padding: "13px" }}>
-                      {item.musteri?.telefon || "-"}
+                      {item.musteris?.telefon || "-"}
                     </CTableDataCell>
                     <CTableDataCell style={{ padding: "13px" }}>
-                      {item.musteri?.adres || "-"}
+                      {item.musteris?.adres || "-"}
                     </CTableDataCell>
                     <CTableDataCell style={{ padding: "13px" }}>{item.urunAdi || "-"}</CTableDataCell>
                     <CTableDataCell style={{ padding: "13px" }}>{item.birim || "-"}</CTableDataCell>
