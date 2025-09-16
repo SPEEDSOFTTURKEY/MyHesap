@@ -17,7 +17,7 @@ import dayjs from "dayjs";
 import { TextField } from "@mui/material";
 import DatePickerField from "./DatePickerField";
 
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 const paymentScheduleMap = {
   monthly: 1,

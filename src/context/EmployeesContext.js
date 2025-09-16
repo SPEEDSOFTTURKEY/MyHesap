@@ -8,7 +8,7 @@ import {
 import api from "../api/api";
 
 const EmployeesContext = createContext();
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 export const EmployeesProvider = ({ children }) => {
   const [employees, setEmployees] = useState([]);

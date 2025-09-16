@@ -37,7 +37,7 @@ import { cilPen, cilPlus, cilTrash, cilBan } from "@coreui/icons";
 import CustomerModal from "../../../components/customers/CustomerModal";
 import api from "../../../api/api";
 
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 const CustomerDetail = () => {
   const { id } = useParams();

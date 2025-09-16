@@ -21,7 +21,7 @@ import CIcon from "@coreui/icons-react";
 import { cilPlus, cilReload, cilUser } from "@coreui/icons"; // cilTrash kaldırıldı
 import { useUser } from "../../../../context/UserContext";
 import api from "../../../../api/api";
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 const Users = () => {
   const [users, setUsers] = useState([]);

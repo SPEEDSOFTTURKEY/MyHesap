@@ -21,7 +21,7 @@ import SupplierFinancial from "../../../components/suppliers/SupplierFinancial";
 import SupplierContact from "../../../components/suppliers/SupplierContact";
 import SupplierOther from "../../../components/suppliers/SupplierOther";
 import api from "../../../api/api";
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 const SupplierNew = () => {
   const navigate = useNavigate();

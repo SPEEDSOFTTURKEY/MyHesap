@@ -30,7 +30,7 @@ import "jspdf-autotable";
 import * as XLSX from 'xlsx';
 import axios from "axios";
 
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 // Chart.js bileşenlerini kaydet
 ChartJS.register(

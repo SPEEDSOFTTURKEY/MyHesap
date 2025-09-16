@@ -17,7 +17,7 @@ import { cilPlus } from "@coreui/icons";
 import WarehouseTable from "../../../components/warehouses/WarehouseTable";
 import WarehouseModal from "../../../components/warehouses/WarehouseModal";
 import api from "../../../api/api";
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 const Warehouses = () => {
   const [warehouses, setWarehouses] = useState([]);

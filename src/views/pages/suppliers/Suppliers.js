@@ -27,7 +27,7 @@ import SupplierTable from "../../../components/suppliers/SupplierTable";
 import SupplierModal from "../../../components/suppliers/SupplierModal";
 import api from "../../../api/api";
 import ErrorBoundary from "../products/ErrorBoundary";
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 const Suppliers = () => {
   const [toasts, setToasts] = useState([]);

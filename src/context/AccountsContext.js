@@ -25,7 +25,7 @@ const accountCategories = [
 ];
 
 const AccountsContext = createContext();
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 export const AccountsProvider = ({ children }) => {
   const location = useLocation();
