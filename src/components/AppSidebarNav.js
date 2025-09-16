@@ -14,10 +14,12 @@ import {
   CDropdownItem,
   CNavTitle,
 } from "@coreui/react";
+import { useUser } from "../context/UserContext";
 
 export const AppSidebarNav = ({ items }) => {
   const unfoldable = useSelector((state) => state.sidebarUnfoldable);
   const location = useLocation();
+  const { logout } = useUser();
 
   const navLink = (name, icon, badge, indent = false) => {
     return (
@@ -43,6 +45,15 @@ export const AppSidebarNav = ({ items }) => {
     const { component, name, badge, icon, to, ...rest } = item;
     const Component = component;
 
+    const handleClick = () => {
+      if (to === "/login" && name === "Çıkış Yap") {
+        logout();
+      }
+      if (rest.onClick) {
+        rest.onClick();
+      }
+    };
+
     return (
       <Component as="div" key={index}>
         {to ? (
@@ -50,6 +61,7 @@ export const AppSidebarNav = ({ items }) => {
             as={NavLink}
             to={to}
             className={({ isActive }) => (isActive ? "active" : "")}
+            onClick={handleClick}
             {...rest}
           >
             {navLink(name, icon, badge, indent)}
@@ -91,7 +103,7 @@ export const AppSidebarNav = ({ items }) => {
                 >
                   {navLink(subItem.name, subItem.icon)}
                 </CDropdownItem>
-              ) : null
+              ) : null,
             )}
           </CDropdownMenu>
         </CDropdown>
@@ -110,7 +122,7 @@ export const AppSidebarNav = ({ items }) => {
         {items.map((subItem, subIndex) =>
           subItem.items
             ? navGroup(subItem, subIndex)
-            : navItem(subItem, subIndex, true)
+            : navItem(subItem, subIndex, true),
         )}
       </Component>
     );

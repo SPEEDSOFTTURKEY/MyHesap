@@ -135,7 +135,6 @@ const Modals = lazy(() => import("./views/notifications/modals/Modals"));
 const Toasts = lazy(() => import("./views/notifications/toasts/Toasts"));
 
 const Widgets = lazy(() => import("./views/widgets/Widgets"));
-const ExitPage = lazy(() => import("./views/pages/login/ExitPage")); // yeni component
 
 
 const routes = [
@@ -145,7 +144,6 @@ const routes = [
     element: RegisteredSupplierPurchase,
   }, // test için eklendi
   { path: "dashboard", name: "Hesaplarım", element: Dashboard },
-    { path: "exit", name: "Çıkış", element: ExitPage },
 
   {
     path: "account-detail/:userId",

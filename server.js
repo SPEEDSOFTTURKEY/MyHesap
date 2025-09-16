@@ -1,14 +1,16 @@
 const express = require("express");
 const { createProxyMiddleware } = require("http-proxy-middleware");
+const path = require("path"); // path modülünü ekle
 const app = express();
 
+// API istekleri için proxy
 app.use(
   "/api",
   createProxyMiddleware({
     target: "https://localhost:44375/",
     changeOrigin: true,
-    secure: true, // Verify SSL certificate
-    pathRewrite: { "^/api": "/api" }, // Keep /api in the URL
+    secure: true, // SSL sertifikasını doğrula
+    pathRewrite: { "^/api": "/api" }, // URL'de /api'yi koru
     headers: {
       accept: "*/*",
     },
@@ -25,7 +27,15 @@ app.use(
   }),
 );
 
+// Statik dosyaları build klasöründen sun
+app.use(express.static(path.join(__dirname, "build")));
+
+// React Router'ın istemci tarafı yönlendirmesi için tüm diğer istekleri index.html'e yönlendir
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "build", "index.html"));
+});
+
 const port = 3001;
 app.listen(port, () => {
-  console.log(`Proxy server running on http://localhost:${port}`);
+  console.log(`Sunucu http://localhost:${port} adresinde çalışıyor`);
 });

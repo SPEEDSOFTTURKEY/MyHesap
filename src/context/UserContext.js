@@ -17,13 +17,13 @@ export const UserProvider = ({ children }) => {
 
   useEffect(() => {
     // Sayfa yüklendiğinde localStorage'dan kullanıcı bilgilerini yükle
-    const savedUser = localStorage.getItem('user');
+    const savedUser = localStorage.getItem("user");
     if (savedUser) {
       try {
         setUser(JSON.parse(savedUser));
       } catch (error) {
-        console.error('Kullanıcı bilgileri okunamadı:', error);
-        localStorage.removeItem('user');
+        console.error("Kullanıcı bilgileri okunamadı:", error);
+        localStorage.removeItem("user");
       }
     }
     setLoading(false);
@@ -38,9 +38,21 @@ export const UserProvider = ({ children }) => {
     }
   };
 
+  const logout = () => {
+    localStorage.clear();
+    sessionStorage.clear();
+    document.cookie.split(";").forEach((c) => {
+      document.cookie = c
+        .replace(/^ +/, "")
+        .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+    });
+    setUser(null);
+  };
+
   const value = {
     user,
     setUser: updateUser,
+    logout,
     loading,
   };
 

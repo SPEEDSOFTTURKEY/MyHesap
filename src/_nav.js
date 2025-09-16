@@ -148,7 +148,7 @@ const _nav = [
   {
     component: CNavItem,
     name: "Çıkış Yap",
-    to: "/app/exit",
+    to: "/login",
     icon: <CIcon icon={cilExitToApp} customClassName="nav-icon" />,
   },
 ];

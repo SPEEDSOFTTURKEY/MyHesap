@@ -34,7 +34,7 @@ const AppHeaderDropdown = () => {
 
   const handleLogout = () => {
     logout();
-    navigate("/app/login");
+    navigate("/login");
   };
 
   return (

@@ -1,1 +1,0 @@
-import{r as o,_ as p,R as d,w as i,v as N,P as s}from"./index-DAwD_DDx.js";var r=o.forwardRef(function(e,t){var c=e.children,a=e.as,n=a===void 0?"p":a,l=e.className,m=p(e,["children","as","className"]);return d.createElement(n,i({className:N("card-text",l)},m,{ref:t}),c)});r.propTypes={as:s.elementType,children:s.node,className:s.string};r.displayName="CCardText";export{r as C};

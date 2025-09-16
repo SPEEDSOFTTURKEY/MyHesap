@@ -1,1 +1,0 @@
-import{j as r,i as a,q as m}from"./index-DAwD_DDx.js";const i=({onSubmit:t,children:o})=>{const e=s=>{s.preventDefault(),t()};return r.jsxs(a,{id:"report-form",onSubmit:e,children:[o,r.jsx(m,{style:{backgroundColor:"#4394FF",color:"white"},type:"submit",className:"mt-3",children:"Raporu Hazırla"})]})};export{i as R};
