@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
   CRow,
@@ -37,7 +37,18 @@ import { cilPen, cilPlus, cilTrash, cilBan } from "@coreui/icons";
 import CustomerModal from "../../../components/customers/CustomerModal";
 import api from "../../../api/api";
 
-const API_BASE_URL = "https://speedsofttest.com/api";
+const API_BASE_URL = "https://localhost:44375/api";
+
+// Kullanıcı ID'sini localStorage'dan al
+const getUserId = () => {
+  try {
+    const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+    return user.id;
+  } catch (err) {
+    console.error("Kullanıcı ID'si alınırken hata:", err);
+    return 0;
+  }
+};
 
 const CustomerDetail = () => {
   const { id } = useParams();
@@ -45,6 +56,8 @@ const CustomerDetail = () => {
   const navigate = useNavigate();
   const [customer, setCustomer] = useState(state?.customer || null);
   const [sales, setSales] = useState([]);
+  const [cariMovements, setCariMovements] = useState([]);
+  const [balance, setBalance] = useState({ total: 0, status: 'neutral' });
   const [offers, setOffers] = useState([]);
   const [purchases, setPurchases] = useState([]);
   const [payments, setPayments] = useState([]);
@@ -56,11 +69,18 @@ const CustomerDetail = () => {
   const [showBranchUpdateModal, setShowBranchUpdateModal] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState(null);
   const [showSaleModal, setShowSaleModal] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [formData, setFormData] = useState({
     adi: "",
     adres: "",
     kodu: "",
     aktif: true,
+  });
+  const [paymentFormData, setPaymentFormData] = useState({
+    tutar: "",
+    aciklama: "",
+    musteriId: id,
+    musteriSatisId: null,
   });
   const [saleFormData, setSaleFormData] = useState({
     barkod: "",
@@ -74,7 +94,7 @@ const CustomerDetail = () => {
     depoId: "",
   });
   const [saleItems, setSaleItems] = useState([]);
-  const [depots, setDepots] = useState({}); // Product ID to depot list mapping
+  const [depots, setDepots] = useState({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [toasts, setToasts] = useState([]);
@@ -84,18 +104,26 @@ const CustomerDetail = () => {
   const [showSaleUpdateModal, setShowSaleUpdateModal] = useState(false);
   const [selectedSale, setSelectedSale] = useState(null);
   const [products, setProducts] = useState([]);
-  const [selectedSales, setSelectedSales] = useState([]); // Toplu iptal için seçili satışlar
+  const [selectedSales, setSelectedSales] = useState([]);
+  const [userId, setUserId] = useState(getUserId());
 
-  // Hardcoded user state, similar to Sales component
-  const [user] = useState({
-    id: 1002,
-    aktiflikDurumu: 1,
-    durumu: 1,
-    yetkiId: 1,
-    kullaniciAdi: "gizem",
-  });
+  // localStorage değişikliklerini dinle ve userId'yi güncelle
+  useEffect(() => {
+    const handleStorageChange = (e) => {
+      if (e.key === "user") {
+        const newUserId = getUserId();
+        setUserId(newUserId);
+      }
+    };
 
-  // Toast bildirimi ekleme
+    window.addEventListener("storage", handleStorageChange);
+    // Initial check
+    const initialUserId = getUserId();
+    setUserId(initialUserId);
+
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, []);
+
   const addToast = useCallback((message, type = "success") => {
     const toast = (
       <CToast key={Date.now()} autohide={true} visible={true} delay={5000}>
@@ -110,7 +138,17 @@ const CustomerDetail = () => {
     setToasts((prev) => [...prev, toast]);
   }, []);
 
-  // Genel veri çekme fonksiyonu
+  const handleOpenPaymentModal = () => {
+    setSelectedSales([]);
+    setPaymentFormData({
+      tutar: "",
+      aciklama: "",
+      musteriId: id,
+      musteriSatisId: null,
+    });
+    setShowPaymentModal(true);
+  };
+
   const fetchData = async (url, setData) => {
     try {
       const { data } = await api.get(url);
@@ -133,7 +171,26 @@ const CustomerDetail = () => {
     }
   };
 
-  // Müşteri verilerini API'den dönüştürme
+  const fetchCariMovements = useCallback(async () => {
+    try {
+      const { data } = await api.get(`${API_BASE_URL}/musteriSatis/musteriCari-get-by-musteri/${id}`);
+      setCariMovements(data || []);
+      // Filter for payments (IslemTuruId === 1003)
+      setPayments(data.filter(m => m.islemTuruId === 1003) || []);
+    } catch (err) {
+      addToast("Cari hareketler yüklenemedi.", "error");
+    }
+  }, [id, addToast]);
+
+  const fetchBalance = useCallback(async () => {
+    try {
+      const { data } = await api.get(`${API_BASE_URL}/musteriSatis/musteriCari-bakiye-get-by-musteri/${id}`);
+      setBalance(data || { total: 0, status: 'neutral' });
+    } catch (err) {
+      addToast("Bakiye hesaplanamadı.", "error");
+    }
+  }, [id, addToast]);
+
   const mapApiCustomer = async (apiCustomer) => {
     let classificationName = "Bilinmiyor";
     try {
@@ -186,7 +243,6 @@ const CustomerDetail = () => {
     };
   };
 
-  // Müşteri bilgilerini getir
   const fetchCustomer = useCallback(async () => {
     setLoading(true);
     try {
@@ -219,7 +275,6 @@ const CustomerDetail = () => {
     }
   }, [id, addToast]);
 
-  // Şube bilgilerini getir
   const fetchBranches = async () => {
     try {
       const data = await fetchData(
@@ -234,7 +289,6 @@ const CustomerDetail = () => {
     }
   };
 
-  // Satış bilgilerini getir
   const fetchSales = async () => {
     try {
       const data = await fetchData(
@@ -249,7 +303,6 @@ const CustomerDetail = () => {
     }
   };
 
-  // Ürünleri getir
   const fetchProducts = async () => {
     try {
       const { data } = await api.get(`${API_BASE_URL}/urun/urun-get-all`);
@@ -260,7 +313,6 @@ const CustomerDetail = () => {
     }
   };
 
-  // Ürün için depoları getir
   const fetchDepotsForProduct = async (urunId) => {
     try {
       const { data } = await api.get(`${API_BASE_URL}/urun/urun-depolardaki-stoklar/${urunId}`);
@@ -283,7 +335,6 @@ const CustomerDetail = () => {
     }
   };
 
-  // Debounce yardımcı fonksiyonu
   const debounce = (func, wait) => {
     let timeout;
     return function executedFunction(...args) {
@@ -296,7 +347,6 @@ const CustomerDetail = () => {
     };
   };
 
-  // Barkod ile ürün getirme
   const fetchProductByBarcode = async (barcode) => {
     if (!barcode || barcode.length < 3) return;
     try {
@@ -347,7 +397,6 @@ const CustomerDetail = () => {
     []
   );
 
-  // Şube ekleme
   const handleAddBranch = async () => {
     if (!formData.adi) {
       addToast("Şube adı zorunludur.", "error");
@@ -355,6 +404,10 @@ const CustomerDetail = () => {
     }
     if (!id || isNaN(parseInt(id))) {
       addToast("Geçersiz müşteri ID'si.", "error");
+      return;
+    }
+    if (!userId || userId === 0) {
+      addToast("Kullanıcı kimliği bulunamadı. Lütfen oturum açın.", "error");
       return;
     }
     setLoading(true);
@@ -365,7 +418,7 @@ const CustomerDetail = () => {
         kodu: formData.kodu || "",
         aktif: formData.aktif ? 1 : 0,
         musteriId: parseInt(id),
-        kullaniciId: user.id,
+        kullaniciId: userId,
       };
       const { data } = await api.post(
         `${API_BASE_URL}/sube/sube-create`,
@@ -383,7 +436,6 @@ const CustomerDetail = () => {
     }
   };
 
-  // Şube güncelleme
   const handleEditBranch = (branch) => {
     setSelectedBranch(branch);
     setFormData({
@@ -400,6 +452,10 @@ const CustomerDetail = () => {
       addToast("Şube adı zorunludur.", "error");
       return;
     }
+    if (!userId || userId === 0) {
+      addToast("Kullanıcı kimliği bulunamadı. Lütfen oturum açın.", "error");
+      return;
+    }
     setLoading(true);
     try {
       const payload = {
@@ -409,7 +465,7 @@ const CustomerDetail = () => {
         kodu: formData.kodu || "",
         aktif: formData.aktif ? 1 : 0,
         musteriId: parseInt(id),
-        kullaniciId: user.id,
+        kullaniciId: userId,
       };
       await api.put(`${API_BASE_URL}/sube/sube-update`, payload);
       addToast("Şube güncellendi.", "success");
@@ -422,12 +478,15 @@ const CustomerDetail = () => {
     }
   };
 
-  // Şube silme
   const handleDeleteBranch = async (branchId) => {
+    if (!userId || userId === 0) {
+      addToast("Kullanıcı kimliği bulunamadı. Lütfen oturum açın.", "error");
+      return;
+    }
     setLoading(true);
     try {
       await api.delete(
-        `${API_BASE_URL}/sube/sube-delete/${branchId}?kullaniciId=${user.id}`
+        `${API_BASE_URL}/sube/sube-delete/${branchId}?kullaniciId=${userId}`
       );
       addToast("Şube başarıyla silindi.", "success");
       await fetchBranches();
@@ -439,7 +498,6 @@ const CustomerDetail = () => {
     }
   };
 
-  // Satış ekleme
   const handleAddSaleItem = () => {
     if (
       !saleFormData.barkod ||
@@ -474,7 +532,7 @@ const CustomerDetail = () => {
       miktar: parseFloat(saleFormData.miktar),
       toplamFiyat: parseFloat(saleFormData.fiyat) * parseFloat(saleFormData.miktar),
       musteriId: id,
-      kullaniciId: user.id,
+      kullaniciId: userId,
       depoId: parseInt(saleFormData.depoId),
       urunId: parseInt(saleFormData.urunId),
     };
@@ -499,13 +557,11 @@ const CustomerDetail = () => {
     }, 100);
   };
 
-  // Satış kalemini silme
   const handleDeleteSaleItem = (itemId) => {
     setSaleItems((prev) => prev.filter((item) => item.id !== itemId));
     addToast("Ürün silindi.", "success");
   };
 
-  // Depo değişikliğini yönet
   const handleDepotChange = (index, depoId) => {
     setSaleItems((prev) =>
       prev.map((item, i) =>
@@ -514,14 +570,12 @@ const CustomerDetail = () => {
     );
   };
 
-  // Toplam fiyat hesaplama
   const calculateTotalPrice = () => {
     return saleItems
       .reduce((sum, item) => sum + item.toplamFiyat, 0)
       .toLocaleString("tr-TR");
   };
 
-  // Satış kaydetme
   const handleSaveSales = async () => {
     if (saleItems.length === 0) {
       addToast("En az bir ürün ekleyin.", "error");
@@ -529,6 +583,10 @@ const CustomerDetail = () => {
     }
     if (saleItems.some((item) => !item.depoId)) {
       addToast("Tüm ürünler için bir depo seçilmelidir.", "error");
+      return;
+    }
+    if (!userId || userId === 0) {
+      addToast("Kullanıcı kimliği bulunamadı. Lütfen oturum açın.", "error");
       return;
     }
     setLoading(true);
@@ -541,7 +599,7 @@ const CustomerDetail = () => {
         miktar: item.miktar,
         toplamFiyat: item.toplamFiyat,
         musteriId: parseInt(id),
-        kullaniciId: user.id,
+        kullaniciId: userId,
         depoId: item.depoId,
       }));
       await api.post(
@@ -553,6 +611,8 @@ const CustomerDetail = () => {
       setSaleItems([]);
       setDepots({});
       fetchSales();
+      fetchCariMovements();
+      fetchBalance();
     } catch (err) {
       addToast(err.response?.data?.message || "Satış kaydedilemedi.", "error");
     } finally {
@@ -560,7 +620,38 @@ const CustomerDetail = () => {
     }
   };
 
-  // Satış güncelleme
+  const handleSavePayment = async () => {
+    if (!paymentFormData.tutar || parseFloat(paymentFormData.tutar) <= 0) {
+      addToast("Tutar pozitif olmalıdır.", "error");
+      return;
+    }
+    if (!userId || userId === 0) {
+      addToast("Kullanıcı kimliği bulunamadı. Lütfen oturum açın.", "error");
+      return;
+    }
+    setLoading(true);
+    try {
+      const payload = {
+        tutar: parseFloat(paymentFormData.tutar),
+        aciklama: paymentFormData.aciklama,
+        musteriId: parseInt(id),
+        kullaniciId: userId,
+        musteriSatisId: paymentFormData.musteriSatisId || null,
+      };
+      await api.post(`${API_BASE_URL}/musteriSatis/odemeAl-create`, payload);
+      addToast("Ödeme kaydedildi.", "success");
+      setShowPaymentModal(false);
+      setPaymentFormData({ tutar: "", aciklama: "", musteriId: id, musteriSatisId: null });
+      fetchCariMovements();
+      fetchBalance();
+      fetchSales();
+    } catch (err) {
+      addToast(err.response?.data?.message || "Ödeme kaydedilemedi.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleEditSale = (sale) => {
     setSelectedSale(sale);
     setSaleFormData({
@@ -625,6 +716,31 @@ const CustomerDetail = () => {
     }
   };
 
+  const handlePaymentFormChange = (e) => {
+    const { name, value } = e.target;
+    setPaymentFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const handleSelectSaleForPayment = (saleId) => {
+    const selectedSale = sales.find(s => s.id === saleId);
+    if (selectedSale) {
+      const odenenToplam = cariMovements
+        .filter(m => m.musteriSatisId === selectedSale.id && m.islemTuruId === 1003)
+        .reduce((sum, m) => sum + m.tutar, 0);
+      
+      const kalanBorc = (selectedSale.toplamFiyat || 0) - odenenToplam;
+      
+      setPaymentFormData(prev => ({
+        ...prev,
+        musteriSatisId: selectedSale.id,
+        tutar: kalanBorc > 0 ? kalanBorc.toString() : prev.tutar
+      }));
+    }
+  };
+
   const handleUpdateSale = async () => {
     if (
       !saleFormData.barkod ||
@@ -634,6 +750,10 @@ const CustomerDetail = () => {
       !saleFormData.depoId
     ) {
       addToast("Tüm alanlar (barkod, ürün adı, fiyat, miktar, depo) doldurulmalıdır.", "error");
+      return;
+    }
+    if (!userId || userId === 0) {
+      addToast("Kullanıcı kimliği bulunamadı. Lütfen oturum açın.", "error");
       return;
     }
     setLoading(true);
@@ -647,7 +767,7 @@ const CustomerDetail = () => {
         miktar: parseFloat(saleFormData.miktar),
         toplamFiyat: parseFloat(saleFormData.toplamFiyat),
         musteriId: parseInt(id),
-        kullaniciId: user.id,
+        kullaniciId: userId,
         depoId: parseInt(saleFormData.depoId),
       };
       await api.put(
@@ -658,6 +778,8 @@ const CustomerDetail = () => {
       setShowSaleUpdateModal(false);
       setDepots({});
       fetchSales();
+      fetchCariMovements();
+      fetchBalance();
     } catch (err) {
       addToast(err.response?.data?.message || "Satış güncellenemedi.", "error");
     } finally {
@@ -665,34 +787,37 @@ const CustomerDetail = () => {
     }
   };
 
-  // Satış iptal (tek veya toplu)
   const handleCancelSales = useCallback(async (satisIds) => {
     if (!window.confirm(`${Array.isArray(satisIds) ? "Seçili satışları" : "Bu satışı"} iptal etmek istediğinizden emin misiniz?`)) {
       return;
     }
-
+    if (!userId || userId === 0) {
+      addToast("Kullanıcı kimliği bulunamadı. Lütfen oturum açın.", "error");
+      return;
+    }
     setLoading(true);
     try {
-      const ids = Array.isArray(satisIds) ? satisIds : [satisIds];
+      const ids = Array.isArray(satisIds) ? [...new Set(satisIds)] : [satisIds];
       await Promise.all(
         ids.map(async (satisId) => {
           await api.post(`${API_BASE_URL}/musteriSatis/musteriSatis-iptal`, null, {
-            params: { satisId, kullaniciId: user.id }
+            params: { satisId, kullaniciId: userId }
           });
         })
       );
       addToast(`${ids.length} satış iptal edildi.`);
       setSelectedSales([]);
       fetchSales();
+      fetchCariMovements();
+      fetchBalance();
     } catch (err) {
       console.error("Satış İptal Hatası:", err);
       addToast(err.response?.data?.Message || "Satış iptal edilemedi.", "error");
     } finally {
       setLoading(false);
     }
-  }, [addToast, fetchSales]);
+  }, [addToast, fetchSales, fetchCariMovements, fetchBalance, userId]);
 
-  // Satış seçimi (toplu iptal için)
   const handleSelectSale = (saleId) => {
     setSelectedSales((prev) =>
       prev.includes(saleId)
@@ -701,7 +826,6 @@ const CustomerDetail = () => {
     );
   };
 
-  // Toplu iptal butonu
   const handleBulkCancel = () => {
     if (selectedSales.length === 0) {
       addToast("Lütfen en az bir satış seçin.", "error");
@@ -710,18 +834,23 @@ const CustomerDetail = () => {
     handleCancelSales(selectedSales);
   };
 
-  // Satış silme
   const handleDeleteSale = async (saleId) => {
     if (!window.confirm("Bu satış kaydını silmek istediğinizden emin misiniz?")) {
+      return;
+    }
+    if (!userId || userId === 0) {
+      addToast("Kullanıcı kimliği bulunamadı. Lütfen oturum açın.", "error");
       return;
     }
     setLoading(true);
     try {
       await api.delete(
-        `${API_BASE_URL}/musteriSatis/musteriSatis-delete/${saleId}?kullaniciId=${user.id}`
+        `${API_BASE_URL}/musteriSatis/musteriSatis-delete/${saleId}?kullaniciId=${userId}`
       );
       addToast("Satış silindi.", "success");
       fetchSales();
+      fetchCariMovements();
+      fetchBalance();
     } catch (err) {
       addToast(err.response?.data?.message || "Satış silinemedi.", "error");
     } finally {
@@ -729,13 +858,16 @@ const CustomerDetail = () => {
     }
   };
 
-  // Müşteri silme
   const handleDelete = async () => {
+    if (!userId || userId === 0) {
+      addToast("Kullanıcı kimliği bulunamadı. Lütfen oturum açın.", "error");
+      return;
+    }
     setShowDeleteModal(false);
     setLoading(true);
     try {
       await api.delete(
-        `${API_BASE_URL}/musteri/musteri-delete/${customer.id}?kullaniciId=${user.id}`
+        `${API_BASE_URL}/musteri/musteri-delete/${customer.id}?kullaniciId=${userId}`
       );
       addToast("Müşteri silindi.", "success");
       navigate("/app/customers");
@@ -747,8 +879,11 @@ const CustomerDetail = () => {
     }
   };
 
-  // Müşteri aktif etme
   const handleActivate = async () => {
+    if (!userId || userId === 0) {
+      addToast("Kullanıcı kimliği bulunamadı. Lütfen oturum açın.", "error");
+      return;
+    }
     setLoading(true);
     try {
       await api.put(`${API_BASE_URL}/musteri/musteri-aktif/${customer.id}`);
@@ -765,17 +900,18 @@ const CustomerDetail = () => {
     }
   };
 
-  // Component mount olduğunda verileri getir
   useEffect(() => {
-    if (id && (!customer || !customer.id)) {
+    if (id) {
       fetchCustomer();
-    } else {
-      fetchCustomer();
+      fetchSales();
+      fetchBranches();
+      fetchProducts();
+      fetchCariMovements();
+      fetchBalance();
     }
-    fetchSales();
-    fetchBranches();
-    fetchProducts();
-  }, [id, fetchCustomer]);
+  }, [id]);
+
+  const uniqueSatisIds = useMemo(() => [...new Set(sales.map(sale => sale.satisId))], [sales]);
 
   if (loading || !customer) {
     return (
@@ -848,15 +984,16 @@ const CustomerDetail = () => {
                 <CCol>
                   <CCard>
                     <CCardHeader
-                      className="bg-danger"
+                      className={balance.status === 'borclu' ? "bg-danger" : balance.status === 'alacakli' ? "bg-success" : "bg-secondary"}
                       style={{ color: "white" }}
                     >
-                      Açık Bakiye
+                      Açık Bakiye ({balance.status === 'borclu' ? 'Borçlu' : balance.status === 'alacakli' ? 'Alacaklı' : 'Nötr'})
                     </CCardHeader>
                     <CCardBody>
                       <p className="fw-bold">
-                        {(customer.openBalance || 0).toLocaleString("tr-TR")}{" "}
-                        TRY
+                        {Math.abs(balance.total).toLocaleString("tr-TR")} TRY
+                        {balance.status === 'borclu' && ' (Borçlu)'}
+                        {balance.status === 'alacakli' && ' (Alacaklı)'}
                       </p>
                     </CCardBody>
                   </CCard>
@@ -919,6 +1056,13 @@ const CustomerDetail = () => {
               Satış Yap
             </CButton>
             <CButton
+              color="primary"
+              style={{ color: "white" }}
+              onClick={handleOpenPaymentModal}
+            >
+              Ödeme Al
+            </CButton>
+            <CButton
               color="warning"
               style={{ color: "white" }}
               onClick={handleBulkCancel}
@@ -935,12 +1079,8 @@ const CustomerDetail = () => {
               Yeni Şube Ekle
             </CButton>
             <CDropdown>
-              <CDropdownToggle
-                color="info"
-                style={{ color: "white" }}
-                disabled={true}
-              >
-                Ödeme/Tahsilat
+              <CDropdownToggle color="secondary" disabled={true}>
+                Ödeme Al
               </CDropdownToggle>
               <CDropdownMenu>
                 <CDropdownItem disabled>Nakit-Kredi Kartı-Banka</CDropdownItem>
@@ -997,6 +1137,7 @@ const CustomerDetail = () => {
           <CRow>
             {[
               { title: "Önceki Satışlar", data: sales, type: "sales" },
+              { title: "Cari Hareketleri", data: cariMovements, type: "cari" },
               { title: "Önceki Ödemeler", data: payments, type: "payments" },
               { title: "Şubeler", data: branches, type: "branches" },
             ].map((table) => (
@@ -1019,21 +1160,29 @@ const CustomerDetail = () => {
                               <CTableHeaderCell>Aktif</CTableHeaderCell>
                               <CTableHeaderCell>İşlemler</CTableHeaderCell>
                             </>
+                          ) : table.type === "cari" ? (
+                            <>
+                              <CTableHeaderCell>Tarih</CTableHeaderCell>
+                              <CTableHeaderCell>Tür</CTableHeaderCell>
+                              <CTableHeaderCell>Açıklama</CTableHeaderCell>
+                              <CTableHeaderCell>Tutar</CTableHeaderCell>
+                              <CTableHeaderCell>Bakiye</CTableHeaderCell>
+                            </>
                           ) : table.type === "sales" ? (
                             <>
                               <CTableHeaderCell>
-                                <CFormInput
-                                  type="checkbox"
-                                  checked={selectedSales.length === sales.length}
+                                <CFormCheck
+                                  checked={selectedSales.length === uniqueSatisIds.length}
                                   onChange={() =>
                                     setSelectedSales(
-                                      selectedSales.length === sales.length
+                                      selectedSales.length === uniqueSatisIds.length
                                         ? []
-                                        : sales.map((sale) => sale.satisId)
+                                        : uniqueSatisIds
                                     )
                                   }
                                 />
                               </CTableHeaderCell>
+                              <CTableHeaderCell>Satış ID</CTableHeaderCell>
                               <CTableHeaderCell>Barkod</CTableHeaderCell>
                               <CTableHeaderCell>Ürün Adı</CTableHeaderCell>
                               <CTableHeaderCell>Fiyat</CTableHeaderCell>
@@ -1091,16 +1240,28 @@ const CustomerDetail = () => {
                                 </CTableDataCell>
                               </CTableRow>
                             ))
+                          : table.type === "cari"
+                          ? cariMovements.map((movement, index) => (
+                              <CTableRow key={index}>
+                                <CTableDataCell>{new Date(movement.tarih).toLocaleDateString()}</CTableDataCell>
+                                <CTableDataCell>{movement.islemTuruId === 1001 ? 'Satış' : movement.islemTuruId === 1003 ? 'Ödeme' : 'Diğer'}</CTableDataCell>
+                                <CTableDataCell>{movement.aciklama || 'Yok'}</CTableDataCell>
+                                <CTableDataCell className={movement.tutar < 0 ? 'text-danger' : 'text-success'}>
+                                  {Math.abs(movement.tutar).toLocaleString("tr-TR")} TRY {movement.tutar < 0 ? '(Borç)' : '(Alacak)'}
+                                </CTableDataCell>
+                                <CTableDataCell>{movement.bakiye?.toLocaleString("tr-TR")} TRY</CTableDataCell>
+                              </CTableRow>
+                            ))
                           : table.type === "sales"
                           ? sales.map((sale) => (
                               <CTableRow key={sale.id}>
                                 <CTableDataCell>
-                                  <CFormInput
-                                    type="checkbox"
+                                  <CFormCheck
                                     checked={selectedSales.includes(sale.satisId)}
                                     onChange={() => handleSelectSale(sale.satisId)}
                                   />
                                 </CTableDataCell>
+                                <CTableDataCell>{sale.satisId}</CTableDataCell>
                                 <CTableDataCell>{sale.barkod}</CTableDataCell>
                                 <CTableDataCell>{sale.urunAdi}</CTableDataCell>
                                 <CTableDataCell>{sale.fiyat}</CTableDataCell>
@@ -1142,11 +1303,11 @@ const CustomerDetail = () => {
                           : table.data.map((item, index) => (
                               <CTableRow key={index}>
                                 <CTableDataCell>
-                                  {new Date().toLocaleDateString()}
+                                  {new Date(item.tarih).toLocaleDateString()}
                                 </CTableDataCell>
-                                <CTableDataCell>{item.no || "Yok"}</CTableDataCell>
+                                <CTableDataCell>{item.musteriSatisId || "Yok"}</CTableDataCell>
                                 <CTableDataCell>
-                                  {item.durum || "Bilinmiyor"}
+                                  {item.islemTuruId === 1003 ? "Ödeme" : "Bilinmiyor"}
                                 </CTableDataCell>
                                 <CTableDataCell>
                                   {(item.tutar || 0).toLocaleString("tr-TR")} TRY
@@ -1163,7 +1324,6 @@ const CustomerDetail = () => {
         </CCol>
       </CRow>
 
-      {/* Müşteri Güncelleme Modal */}
       <CustomerModal
         visible={showUpdateModal}
         onClose={() => setShowUpdateModal(false)}
@@ -1174,7 +1334,6 @@ const CustomerDetail = () => {
         }}
       />
 
-      {/* Şube Ekleme Modal */}
       <CModal
         visible={showBranchModal}
         onClose={() => setShowBranchModal(false)}
@@ -1238,14 +1397,13 @@ const CustomerDetail = () => {
           <CButton
             color="primary"
             onClick={handleAddBranch}
-            disabled={loading || !formData.adi}
+            disabled={loading || !formData.adi || !userId || userId === 0}
           >
             Kaydet
           </CButton>
         </CModalFooter>
       </CModal>
 
-      {/* Şube Güncelleme Modal */}
       <CModal
         visible={showBranchUpdateModal}
         onClose={() => setShowBranchUpdateModal(false)}
@@ -1312,14 +1470,13 @@ const CustomerDetail = () => {
           <CButton
             color="primary"
             onClick={handleUpdateBranch}
-            disabled={loading || !formData.adi}
+            disabled={loading || !formData.adi || !userId || userId === 0}
           >
             Güncelle
           </CButton>
         </CModalFooter>
       </CModal>
 
-      {/* Satış Ekleme Modal */}
       <CModal visible={showSaleModal} onClose={() => setShowSaleModal(false)} size="xl">
         <CModalHeader>
           <CModalTitle>Satış Yap</CModalTitle>
@@ -1494,14 +1651,112 @@ const CustomerDetail = () => {
           <CButton
             color="primary"
             onClick={handleSaveSales}
-            disabled={loading || saleItems.length === 0 || saleItems.some((item) => !item.depoId)}
+            disabled={loading || saleItems.length === 0 || saleItems.some((item) => !item.depoId) || !userId || userId === 0}
           >
             Satışı Kaydet
           </CButton>
         </CModalFooter>
       </CModal>
 
-      {/* Satış Güncelleme Modal */}
+      <CModal visible={showPaymentModal} onClose={() => setShowPaymentModal(false)} size="lg">
+        <CModalHeader>
+          <CModalTitle>Ödeme Al</CModalTitle>
+        </CModalHeader>
+        <CModalBody>
+          <CForm>
+            <CRow className="mb-3">
+              <CCol>
+                <CFormLabel>Ödeme Yapılacak Satışı Seçin (Opsiyonel)</CFormLabel>
+                <CTable responsive>
+                  <CTableHead>
+                    <CTableRow>
+                      <CTableHeaderCell>Seç</CTableHeaderCell>
+                      <CTableHeaderCell>Satış No</CTableHeaderCell>
+                      <CTableHeaderCell>Tarih</CTableHeaderCell>
+                      <CTableHeaderCell>Toplam Tutar</CTableHeaderCell>
+                    </CTableRow>
+                  </CTableHead>
+                  <CTableBody>
+                    {sales.filter(s => s.durumu === 1).map((sale) => {
+                      const odenenToplam = cariMovements
+                        .filter(m => m.musteriSatisId === sale.id && m.islemTuruId === 1003)
+                        .reduce((sum, m) => sum + m.tutar, 0);
+                      
+                      const kalanBorc = (sale.toplamFiyat || 0) - odenenToplam;
+                      
+                      return (
+                        <CTableRow key={sale.id}>
+                          <CTableDataCell>
+                            <CFormCheck
+                              checked={paymentFormData.musteriSatisId === sale.id}
+                              onChange={() => handleSelectSaleForPayment(sale.id)}
+                              disabled={kalanBorc <= 0}
+                            />
+                          </CTableDataCell>
+                          <CTableDataCell>{sale.satisId}</CTableDataCell>
+                          <CTableDataCell>
+                            {new Date(sale.eklenmeTarihi).toLocaleDateString()}
+                          </CTableDataCell>
+                          <CTableDataCell>
+                            {(sale.toplamFiyat || 0).toLocaleString("tr-TR")} TRY
+                          </CTableDataCell>
+                        </CTableRow>
+                      );
+                    })}
+                  </CTableBody>
+                </CTable>
+              </CCol>
+            </CRow>
+
+            <CRow className="mb-3">
+              <CCol>
+                <CFormLabel>Tutar (TRY)</CFormLabel>
+                <CFormInput
+                  name="tutar"
+                  type="number"
+                  step="0.01"
+                  value={paymentFormData.tutar}
+                  onChange={handlePaymentFormChange}
+                  required
+                />
+              </CCol>
+            </CRow>
+            <CRow className="mb-3">
+              <CCol>
+                <CFormLabel>Açıklama</CFormLabel>
+                <CFormInput
+                  name="aciklama"
+                  value={paymentFormData.aciklama}
+                  onChange={handlePaymentFormChange}
+                />
+              </CCol>
+            </CRow>
+            
+            {paymentFormData.musteriSatisId && (
+              <CRow className="mb-3">
+                <CCol>
+                  <div className="alert alert-info">
+                    <strong>Seçili Satış:</strong> {paymentFormData.musteriSatisId}
+                  </div>
+                </CCol>
+              </CRow>
+            )}
+          </CForm>
+        </CModalBody>
+        <CModalFooter>
+          <CButton color="secondary" onClick={() => setShowPaymentModal(false)}>
+            İptal
+          </CButton>
+          <CButton
+            color="success"
+            onClick={handleSavePayment}
+            disabled={loading || !paymentFormData.tutar || !userId || userId === 0}
+          >
+            Ödemeyi Kaydet
+          </CButton>
+        </CModalFooter>
+      </CModal>
+
       <CModal
         visible={showSaleUpdateModal}
         onClose={() => setShowSaleUpdateModal(false)}
@@ -1620,14 +1875,13 @@ const CustomerDetail = () => {
           <CButton
             color="primary"
             onClick={handleUpdateSale}
-            disabled={loading || !saleFormData.depoId}
+            disabled={loading || !saleFormData.depoId || !userId || userId === 0}
           >
             Güncelle
           </CButton>
         </CModalFooter>
       </CModal>
 
-      {/* Müşteri Silme Onay Modal */}
       <CModal visible={showDeleteModal} onClose={() => setShowDeleteModal(false)}>
         <CModalHeader>
           <CModalTitle>Müşteriyi Sil</CModalTitle>
@@ -1641,7 +1895,7 @@ const CustomerDetail = () => {
           <CButton color="secondary" onClick={() => setShowDeleteModal(false)}>
             İptal
           </CButton>
-          <CButton color="danger" onClick={handleDelete} disabled={loading}>
+          <CButton color="danger" onClick={handleDelete} disabled={loading || !userId || userId === 0}>
             Sil
           </CButton>
         </CModalFooter>
