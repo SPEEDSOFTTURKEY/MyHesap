@@ -94,7 +94,7 @@ const OtherInfo = ({ formData, handleChange }) => {
             />
           </div>
 
-          <div className="mb-3">
+          {/* <div className="mb-3">
             <CFormLabel style={labelStyle}>Fatura Başlığı</CFormLabel>
             <CFormInput
               name="invoiceTitle"
@@ -103,7 +103,7 @@ const OtherInfo = ({ formData, handleChange }) => {
               style={{ ...inputStyle, color: "#000000" }}
               placeholder="Faturada görünecek başlık"
             />
-          </div>
+          </div> */}
         </CCol>
 
         <CCol>

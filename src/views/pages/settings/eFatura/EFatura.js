@@ -30,6 +30,8 @@ import {
   CModalFooter,
 } from "@coreui/react";
 import { useRef, useState, useEffect } from "react";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 
 const API_BASE_URL = "https://localhost:44375/api";
 
@@ -47,12 +49,10 @@ const getUserId = () => {
 const EFatura = () => {
   const [toasts, setToasts] = useState([]);
   const toaster = useRef();
-  const [activeTab, setActiveTab] = useState("eFaturaAyarlari");
   const [edmBilgileriList, setEdmBilgileriList] = useState([]);
   const [showEdmModal, setShowEdmModal] = useState(false);
   const [showEdmUpdateModal, setShowEdmUpdateModal] = useState(false);
   const [showEdmDeleteModal, setShowEdmDeleteModal] = useState(false);
-  const [showEdmViewModal, setShowEdmViewModal] = useState(false);
   const [showEdmListModal, setShowEdmListModal] = useState(false);
   const [selectedEdm, setSelectedEdm] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -72,31 +72,11 @@ const EFatura = () => {
     kullaniciId: userId,
   });
 
-  // Form verileri for other settings
-  const [formData, setFormData] = useState({
-    faturaAltiMetin: "",
-    bilgilendirmeEPosta: "",
-    ePostaBaslik: "",
-    ePostaMetin: "",
-    gelenEFaturalar: false,
-    satisAciklamasiGoster: false,
-    bankaBilgileriniGoster: false,
-    guncelBakiyeGoster: false,
-    urunKodunuGoster: false,
-    irsaliyeEPostaBaslik: "",
-    irsaliyeEPostaMetin: "",
-    aracPlakalari: "",
-    soforIsimSoyisim: "",
-    soforTCKimlikNo: "",
-    firmaEPosta: "",
-    firmaTelefonu: "",
-    webSitesi: "",
-    mersisNo: "",
-    ticariSicilNo: "",
-    vknTckn: "",
-    vergiDairesi: "",
-    adres: "",
-  });
+  // Faturalar için yeni state'ler
+  const [invoices, setInvoices] = useState([]);
+  const [selectedInvoiceHtml, setSelectedInvoiceHtml] = useState("");
+  const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [selectedInvoiceNumber, setSelectedInvoiceNumber] = useState("");
 
   // localStorage değişikliklerini dinle ve userId'yi güncelle
   useEffect(() => {
@@ -151,19 +131,153 @@ const EFatura = () => {
       });
       if (response.ok) {
         const data = await response.json();
-        console.log("EDM Data:", data); // Debug: Log raw API response
-        // Remove durumu filter since it may not exist in the data
+        console.log("EDM Data:", data);
         setEdmBilgileriList(data);
-        console.log("Filtered EDM List:", data); // Debug: Log filtered list
+        console.log("Filtered EDM List:", data);
       } else {
         addToast("EDM bilgileri yüklenirken hata oluştu!", "error");
       }
     } catch (err) {
-      console.error("Fetch EDM Error:", err); // Debug: Log error
+      console.error("Fetch EDM Error:", err);
       addToast("Sunucuya bağlanılamadı.", "error");
     } finally {
       setLoading(false);
     }
+  };
+
+  // Fetch All Invoices
+  const fetchInvoices = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/EFatura/invoices`);
+      if (response.ok) {
+        const data = await response.json();
+        setInvoices(data.invoices || []);
+      } else {
+        addToast("Faturalar yüklenirken hata oluştu!", "error");
+      }
+    } catch (err) {
+      console.error("Fetch Invoices Error:", err);
+      addToast("Sunucuya bağlanılamadı.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fetch Invoice HTML
+  const fetchInvoiceHtml = async (invoiceNumber) => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/EFatura/invoice-html/${invoiceNumber}`);
+      if (response.ok) {
+        const data = await response.json();
+        setSelectedInvoiceHtml(data.htmlContent || "");
+        setShowInvoiceModal(true);
+      } else {
+        addToast("Fatura HTML'i yüklenirken hata oluştu!", "error");
+      }
+    } catch (err) {
+      console.error("Fetch Invoice HTML Error:", err);
+      addToast("Sunucuya bağlanılamadı.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Print Invoice
+  const printInvoice = () => {
+    const content = document.getElementById("invoice-html").innerHTML;
+    const printWindow = window.open("", "", "height=800, width=1000");
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Yazdır</title>
+          <style>
+            body {
+              font-family: Arial, sans-serif;
+              color: #000;
+              background-color: #fff;
+              margin: 0;
+              padding: 20px;
+            }
+            .invoice-container {
+              border: 1px solid #ddd;
+              padding: 20px;
+              background-color: #fff;
+            }
+            table {
+              width: 100%;
+              border-collapse: collapse;
+              margin-bottom: 20px;
+            }
+            th, td {
+              border: 1px solid #ddd;
+              padding: 8px;
+              text-align: left;
+            }
+            th {
+              background-color: #f2f2f2;
+            }
+          </style>
+        </head>
+        <body>
+          ${content}
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.print();
+  };
+
+  // Download PDF
+  const downloadPdf = () => {
+    const input = document.getElementById("invoice-html");
+    
+    // Yazdırma için özel stiller ekleyelim
+    const originalStyles = input.innerHTML;
+    const printStyles = `
+      <style>
+        body {
+          font-family: Arial, sans-serif;
+          color: #000;
+          background-color: #fff;
+          margin: 0;
+          padding: 20px;
+        }
+        .invoice-container {
+          border: 1px solid #ddd;
+          padding: 20px;
+          background-color: #fff;
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          margin-bottom: 20px;
+        }
+        th, td {
+          border: 1px solid #ddd;
+          padding: 8px;
+          text-align: left;
+        }
+        th {
+          background-color: #f2f2f2;
+        }
+      </style>
+    `;
+    
+    input.innerHTML = printStyles + originalStyles;
+    
+    html2canvas(input, { scale: 2 }).then((canvas) => {
+      // Orijinal içeriği geri yükle
+      input.innerHTML = originalStyles;
+      
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF("p", "mm", "a4");
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`fatura_${selectedInvoiceNumber}.pdf`);
+    });
   };
 
   // Create EDM Bilgileri
@@ -221,7 +335,7 @@ const EFatura = () => {
         addToast(errorData.message || "EDM bilgisi eklenemedi.", "error");
       }
     } catch (err) {
-      console.error("Add EDM Error:", err); // Debug: Log error
+      console.error("Add EDM Error:", err);
       addToast("EDM bilgisi eklenirken hata oluştu.", "error");
     } finally {
       setLoading(false);
@@ -271,7 +385,7 @@ const EFatura = () => {
         addToast(errorData.message || "EDM bilgisi güncellenemedi.", "error");
       }
     } catch (err) {
-      console.error("Update EDM Error:", err); // Debug: Log error
+      console.error("Update EDM Error:", err);
       addToast("EDM bilgisi güncellenirken hata oluştu.", "error");
     } finally {
       setLoading(false);
@@ -304,7 +418,7 @@ const EFatura = () => {
         addToast(errorData.message || "EDM bilgisi silinemedi.", "error");
       }
     } catch (err) {
-      console.error("Delete EDM Error:", err); // Debug: Log error
+      console.error("Delete EDM Error:", err);
       addToast("EDM bilgisi silinirken hata oluştu.", "error");
     } finally {
       setLoading(false);
@@ -331,33 +445,10 @@ const EFatura = () => {
     setShowEdmUpdateModal(true);
   };
 
-  // Handle input change for existing form
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  // Handle toggle change for existing form
-  const handleToggleChange = (name) => {
-    setFormData((prev) => ({ ...prev, [name]: !prev[name] }));
-  };
-
   // Handle EDM form input change
   const handleEdmFormChange = (e) => {
     const { name, value } = e.target;
     setEdmFormData((prev) => ({ ...prev, [name]: value }));
-  };
-
-  // Handle submit for existing settings
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      // Simulate API call for existing settings
-      await Promise.resolve();
-      addToast("Ayarlar başarıyla kaydedildi");
-    } catch (err) {
-      addToast("Ayarlar kaydedilirken bir hata oluştu!", "error");
-    }
   };
 
   // Handle EDM List Modal Open
@@ -366,242 +457,17 @@ const EFatura = () => {
     fetchEdmBilgileri();
   };
 
-  // Fetch EDM Bilgileri on component mount
+  // Show Invoice
+  const handleShowInvoice = (invoice) => {
+    setSelectedInvoiceNumber(invoice.faturaNumarasi);
+    fetchInvoiceHtml(invoice.faturaNumarasi);
+  };
+
+  // Fetch EDM Bilgileri and Invoices on component mount
   useEffect(() => {
     fetchEdmBilgileri();
+    fetchInvoices();
   }, []);
-
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case "eFaturaAyarlari":
-        return (
-          <CForm onSubmit={handleSubmit}>
-            <CRow className="mb-3">
-              <CCol md={6}>
-                <CFormLabel>Fatura Altı Sabit Metin</CFormLabel>
-                <CFormTextarea
-                  name="faturaAltiMetin"
-                  value={formData.faturaAltiMetin}
-                  onChange={handleInputChange}
-                  rows="4"
-                />
-              </CCol>
-              <CCol md={6}>
-                <CFormLabel>Bilgilendirme E-Posta</CFormLabel>
-                <CFormInput
-                  type="email"
-                  name="bilgilendirmeEPosta"
-                  value={formData.bilgilendirmeEPosta}
-                  onChange={handleInputChange}
-                />
-              </CCol>
-            </CRow>
-            <CRow className="mb-3">
-              <CCol md={6}>
-                <CFormLabel>E-Posta Başlık</CFormLabel>
-                <CFormInput
-                  name="ePostaBaslik"
-                  value={formData.ePostaBaslik}
-                  onChange={handleInputChange}
-                />
-              </CCol>
-              <CCol md={6}>
-                <CFormLabel>E-Posta Metin</CFormLabel>
-                <CFormTextarea
-                  name="ePostaMetin"
-                  value={formData.ePostaMetin}
-                  onChange={handleInputChange}
-                  rows="4"
-                />
-              </CCol>
-            </CRow>
-            <CRow className="mb-3">
-              <CCol md={6}>
-                <CFormLabel>Gelen E-Faturalar</CFormLabel>
-                <CFormSwitch
-                  id="gelenEFaturalar"
-                  checked={formData.gelenEFaturalar}
-                  onChange={() => handleToggleChange("gelenEFaturalar")}
-                  label={formData.gelenEFaturalar ? "Aktif" : "Pasif"}
-                />
-              </CCol>
-              <CCol md={6}>
-                <CFormLabel>Satış Açıklamasını Göster</CFormLabel>
-                <CFormSwitch
-                  id="satisAciklamasiGoster"
-                  checked={formData.satisAciklamasiGoster}
-                  onChange={() => handleToggleChange("satisAciklamasiGoster")}
-                  label={formData.satisAciklamasiGoster ? "Aktif" : "Pasif"}
-                />
-              </CCol>
-            </CRow>
-            <CRow className="mb-3">
-              <CCol md={6}>
-                <CFormLabel>Banka Bilgilerini Göster</CFormLabel>
-                <CFormSwitch
-                  id="bankaBilgileriniGoster"
-                  checked={formData.bankaBilgileriGoster}
-                  onChange={() => handleToggleChange("bankaBilgileriGoster")}
-                  label={formData.bankaBilgileriGoster ? "Aktif" : "Pasif"}
-                />
-              </CCol>
-              <CCol md={6}>
-                <CFormLabel>Güncel Bakiye Göster</CFormLabel>
-                <CFormSwitch
-                  id="guncelBakiyeGoster"
-                  checked={formData.guncelBakiyeGoster}
-                  onChange={() => handleToggleChange("guncelBakiyeGoster")}
-                  label={formData.guncelBakiyeGoster ? "Aktif" : "Pasif"}
-                />
-              </CCol>
-            </CRow>
-            <CRow className="mb-3">
-              <CCol md={6}>
-                <CFormLabel>Ürün Kodunu Göster</CFormLabel>
-                <CFormSwitch
-                  id="urunKodunuGoster"
-                  checked={formData.urunKodunuGoster}
-                  onChange={() => handleToggleChange("urunKodunuGoster")}
-                  label={formData.urunKodunuGoster ? "Aktif" : "Pasif"}
-                />
-              </CCol>
-            </CRow>
-          </CForm>
-        );
-      case "eIrsaliyeAyarlari":
-        return (
-          <CForm onSubmit={handleSubmit}>
-            <CRow className="mb-3">
-              <CCol md={6}>
-                <CFormLabel>E-Posta Başlık</CFormLabel>
-                <CFormInput
-                  name="irsaliyeEPostaBaslik"
-                  value={formData.irsaliyeEPostaBaslik}
-                  onChange={handleInputChange}
-                />
-              </CCol>
-              <CCol md={6}>
-                <CFormLabel>E-Posta Metin</CFormLabel>
-                <CFormTextarea
-                  name="irsaliyeEPostaMetin"
-                  value={formData.irsaliyeEPostaMetin}
-                  onChange={handleInputChange}
-                  rows="4"
-                />
-              </CCol>
-            </CRow>
-            <CRow className="mb-3">
-              <CCol md={6}>
-                <CFormLabel>Araç Plakaları</CFormLabel>
-                <CFormInput
-                  name="aracPlakalari"
-                  value={formData.aracPlakalari}
-                  onChange={handleInputChange}
-                />
-              </CCol>
-              <CCol md={6}>
-                <CFormLabel>Şoför İsim Soyisim</CFormLabel>
-                <CFormInput
-                  name="soforIsimSoyisim"
-                  value={formData.soforIsimSoyisim}
-                  onChange={handleInputChange}
-                />
-              </CCol>
-            </CRow>
-            <CRow className="mb-3">
-              <CCol md={6}>
-                <CFormLabel>Şoför T.C. Kimlik No</CFormLabel>
-                <CFormInput
-                  name="soforTCKimlikNo"
-                  value={formData.soforTCKimlikNo}
-                  onChange={handleInputChange}
-                />
-              </CCol>
-            </CRow>
-          </CForm>
-        );
-      case "firmaBilgileri":
-        return (
-          <CForm onSubmit={handleSubmit}>
-            <CRow className="mb-3">
-              <CCol md={6}>
-                <CFormLabel>Firma E-Posta Adresi</CFormLabel>
-                <CFormInput
-                  type="email"
-                  name="firmaEPosta"
-                  value={formData.firmaEPosta}
-                  onChange={handleInputChange}
-                />
-              </CCol>
-              <CCol md={6}>
-                <CFormLabel>Firma Telefonu</CFormLabel>
-                <CFormInput
-                  type="tel"
-                  name="firmaTelefonu"
-                  value={formData.firmaTelefonu}
-                  onChange={handleInputChange}
-                />
-              </CCol>
-            </CRow>
-            <CRow className="mb-3">
-              <CCol md={6}>
-                <CFormLabel>Web Sitesi</CFormLabel>
-                <CFormInput
-                  name="webSitesi"
-                  value={formData.webSitesi}
-                  onChange={handleInputChange}
-                />
-              </CCol>
-              <CCol md={6}>
-                <CFormLabel>Mersis No</CFormLabel>
-                <CFormInput
-                  name="mersisNo"
-                  value={formData.mersisNo}
-                  onChange={handleInputChange}
-                />
-              </CCol>
-            </CRow>
-            <CRow className="mb-3">
-              <CCol md={6}>
-                <CFormLabel>Ticari Sicil No</CFormLabel>
-                <CFormInput
-                  name="ticariSicilNo"
-                  value={formData.ticariSicilNo}
-                  onChange={handleInputChange}
-                />
-              </CCol>
-              <CCol md={6}>
-                <CFormLabel>VKN/TCKN</CFormLabel>
-                <CFormInput
-                  name="vknTckn"
-                  value={formData.vknTckn}
-                  onChange={handleInputChange}
-                />
-              </CCol>
-            </CRow>
-            <CRow className="mb-3">
-              <CCol md={6}>
-                <CFormLabel>Vergi Dairesi</CFormLabel>
-                <CFormInput
-                  name="vergiDairesi"
-                  value={formData.vergiDairesi}
-                  onChange={handleInputChange}
-                />
-              </CCol>
-              <CCol md={6}>
-                <CFormLabel>Adres</CFormLabel>
-                <CFormTextarea
-                  name="adres"
-                  value={formData.adres}
-                  onChange={handleInputChange}
-                  rows="4"
-                />
-              </CCol>
-            </CRow>
-          </CForm>
-        );
-    }
-  };
 
   return (
     <>
@@ -611,14 +477,6 @@ const EFatura = () => {
 
       <div style={{ display: "flex", gap: "10px", marginBottom: "1rem" }}>
         <CButton
-          type="submit"
-          style={{ width: "150px", color: "white", backgroundColor: "#1D9030" }}
-          onClick={handleSubmit}
-          disabled={activeTab === "edmBilgileri"}
-        >
-          <CIcon icon={cilSave} /> Kaydet
-        </CButton>
-        <CButton
           style={{ width: "150px", color: "white", backgroundColor: "#2965A8" }}
           onClick={handleOpenEdmListModal}
           disabled={loading}
@@ -627,51 +485,47 @@ const EFatura = () => {
         </CButton>
       </div>
 
-      <CCard className="my-3">
-        <CCardHeader
-          style={{
-            backgroundColor: "#2965A8",
-            color: "#FFFFFF",
-            fontSize: "large",
-          }}
-        >
-          <CButtonGroup role="group" className="mb-0">
-            <CButton
-              style={{
-                backgroundColor:
-                  activeTab === "eFaturaAyarlari" ? "#FFFFFF" : "#2965A8",
-                color: activeTab === "eFaturaAyarlari" ? "#2965A8" : "#FFFFFF",
-                border: "1px solid #FFFFFF",
-              }}
-              onClick={() => setActiveTab("eFaturaAyarlari")}
-            >
-              E-Fatura Ayarları
-            </CButton>
-            <CButton
-              style={{
-                backgroundColor:
-                  activeTab === "eIrsaliyeAyarlari" ? "#FFFFFF" : "#2965A8",
-                color: activeTab === "eIrsaliyeAyarlari" ? "#2965A8" : "#FFFFFF",
-                border: "1px solid #FFFFFF",
-              }}
-              onClick={() => setActiveTab("eIrsaliyeAyarlari")}
-            >
-              E-İrsaliye Ayarları
-            </CButton>
-            <CButton
-              style={{
-                backgroundColor:
-                  activeTab === "firmaBilgileri" ? "#FFFFFF" : "#2965A8",
-                color: activeTab === "firmaBilgileri" ? "#2965A8" : "#FFFFFF",
-                border: "1px solid #FFFFFF",
-              }}
-              onClick={() => setActiveTab("firmaBilgileri")}
-            >
-              Firma Bilgileri
-            </CButton>
-          </CButtonGroup>
-        </CCardHeader>
-        <CCardBody>{renderTabContent()}</CCardBody>
+      {/* Faturalar Listesi */}
+      <CCard>
+        <CCardHeader>Faturalar</CCardHeader>
+        <CCardBody>
+          {loading ? (
+            <p>Yükleniyor...</p>
+          ) : invoices.length === 0 ? (
+            <p>Fatura bulunamadı.</p>
+          ) : (
+            <CTable responsive>
+              <CTableHead>
+                <CTableRow>
+                  <CTableHeaderCell>Fatura Numarası</CTableHeaderCell>
+                  <CTableHeaderCell>Fatura Tarihi</CTableHeaderCell>
+                  <CTableHeaderCell>Unvan</CTableHeaderCell>
+                  <CTableHeaderCell>İşlemler</CTableHeaderCell>
+                </CTableRow>
+              </CTableHead>
+              <CTableBody>
+                {invoices.map((invoice) => (
+                  <CTableRow key={invoice.id}>
+                    <CTableDataCell>{invoice.faturaNumarasi || "Bilinmiyor"}</CTableDataCell>
+                    <CTableDataCell>{invoice.faturaTarih || "Yok"}</CTableDataCell>
+                    <CTableDataCell>{invoice.unvan || "Yok"}</CTableDataCell>
+                    <CTableDataCell>
+                      <CButton
+                        color="info"
+                        size="sm"
+                        onClick={() => handleShowInvoice(invoice)}
+                        style={{ color: "white" }}
+                        disabled={loading}
+                      >
+                        Göster
+                      </CButton>
+                    </CTableDataCell>
+                  </CTableRow>
+                ))}
+              </CTableBody>
+            </CTable>
+          )}
+        </CCardBody>
       </CCard>
 
       {/* Modal for EDM List */}
@@ -772,100 +626,6 @@ const EFatura = () => {
         </CModalBody>
         <CModalFooter>
           <CButton color="secondary" onClick={() => setShowEdmListModal(false)}>
-            Kapat
-          </CButton>
-        </CModalFooter>
-      </CModal>
-
-      {/* Modal for Viewing EDM Bilgileri */}
-      <CModal visible={showEdmViewModal} onClose={() => setShowEdmViewModal(false)} size="xl">
-        <CModalHeader>
-          <CModalTitle>EDM Bilgileri</CModalTitle>
-        </CModalHeader>
-        <CModalBody>
-          <CButton
-            color="primary"
-            style={{ color: "white", backgroundColor: "#2965A8", marginBottom: "1rem" }}
-            onClick={() => {
-              setEdmFormData({
-                unvan: "",
-                vergiDairesi: "",
-                vergiNumrasi: "",
-                adres: "",
-                il: "",
-                ilce: "",
-                postaKodu: "",
-                email: "",
-                telefon: "",
-                kullaniciAdi: "",
-                sifre: "",
-                kullaniciId: userId,
-              });
-              setShowEdmModal(true);
-            }}
-            disabled={loading || !userId || userId === 0}
-          >
-            Yeni EDM Bilgisi Ekle
-          </CButton>
-          {loading ? (
-            <p>Yükleniyor...</p>
-          ) : edmBilgileriList.length === 0 ? (
-            <p>EDM bilgisi bulunamadı.</p>
-          ) : (
-            <CTable responsive>
-              <CTableHead>
-                <CTableRow>
-                  <CTableHeaderCell>Ünvan</CTableHeaderCell>
-                  <CTableHeaderCell>Vergi Numarası</CTableHeaderCell>
-                  <CTableHeaderCell>E-Posta</CTableHeaderCell>
-                  <CTableHeaderCell>Telefon</CTableHeaderCell>
-                  <CTableHeaderCell>İşlemler</CTableHeaderCell>
-                </CTableRow>
-              </CTableHead>
-              <CTableBody>
-                {edmBilgileriList.map((edm) => (
-                  <CTableRow key={edm.id}>
-                    <CTableDataCell>{edm.unvan || "Bilinmiyor"}</CTableDataCell>
-                    <CTableDataCell>{edm.vergiNumrasi || "Yok"}</CTableDataCell>
-                    <CTableDataCell>{edm.email || "Yok"}</CTableDataCell>
-                    <CTableDataCell>{edm.telefon || "Yok"}</CTableDataCell>
-                    <CTableDataCell>
-                      <div className="d-flex gap-2">
-                        <CButton
-                          color="info"
-                          size="sm"
-                          onClick={() => {
-                            handleEditEdm(edm);
-                            setShowEdmViewModal(false);
-                          }}
-                          style={{ color: "white" }}
-                          disabled={loading}
-                        >
-                          <CIcon icon={cilPencil} />
-                        </CButton>
-                        <CButton
-                          color="danger"
-                          size="sm"
-                          onClick={() => {
-                            setSelectedEdm(edm);
-                            setShowEdmDeleteModal(true);
-                            setShowEdmViewModal(false);
-                          }}
-                          style={{ color: "white" }}
-                          disabled={loading}
-                        >
-                          <CIcon icon={cilTrash} />
-                        </CButton>
-                      </div>
-                    </CTableDataCell>
-                  </CTableRow>
-                ))}
-              </CTableBody>
-            </CTable>
-          )}
-        </CModalBody>
-        <CModalFooter>
-          <CButton color="secondary" onClick={() => setShowEdmViewModal(false)}>
             Kapat
           </CButton>
         </CModalFooter>
@@ -1149,6 +909,36 @@ const EFatura = () => {
             disabled={loading}
           >
             Sil
+          </CButton>
+        </CModalFooter>
+      </CModal>
+
+      {/* Modal for Showing Invoice HTML */}
+      <CModal visible={showInvoiceModal} onClose={() => setShowInvoiceModal(false)} size="xl">
+        <CModalHeader>
+          <CModalTitle>Fatura Görüntüle - {selectedInvoiceNumber}</CModalTitle>
+        </CModalHeader>
+        <CModalBody style={{ backgroundColor: 'white', color: 'black' }}>
+          <div 
+            id="invoice-html" 
+            dangerouslySetInnerHTML={{ __html: selectedInvoiceHtml }} 
+            style={{ 
+              backgroundColor: 'white', 
+              color: 'black',
+              padding: '20px',
+              border: '1px solid #ddd'
+            }}
+          />
+        </CModalBody>
+        <CModalFooter>
+          <CButton color="secondary" onClick={() => setShowInvoiceModal(false)}>
+            Kapat
+          </CButton>
+          <CButton color="info" onClick={printInvoice} disabled={loading}>
+            Yazdır
+          </CButton>
+          <CButton color="success" onClick={downloadPdf} disabled={loading}>
+            PDF İndir
           </CButton>
         </CModalFooter>
       </CModal>

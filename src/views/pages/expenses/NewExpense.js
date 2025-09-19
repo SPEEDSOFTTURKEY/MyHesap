@@ -373,13 +373,13 @@ const NewExpense = () => {
         console.log("Hesap update payload:", hesapUpdatePayload);
         
         const hesapResponse = await api.put(
-          `${API_BASE_URL}/Hesap/hesapp-update`,
+          `${API_BASE_URL}/Hesap/hesap-update`,
           hesapUpdatePayload,
           {
             headers: { "Content-Type": "application/json", accept: "*/*" },
           },
         );
-        console.log("Hesap update API response (Hesap/hesapp-update):", hesapResponse.data);
+        console.log("Hesap update API response (Hesap/hesap-update):", hesapResponse.data);
       }
 
       setToast({

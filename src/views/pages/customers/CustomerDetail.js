@@ -31,9 +31,16 @@ import {
   CFormLabel,
   CFormCheck,
   CFormSelect,
+  CNav,
+  CNavItem,
+  CNavLink,
+  CTabContent,
+  CTabPane,
+  CInputGroup,
+  CInputGroupText,
 } from "@coreui/react";
 import CIcon from "@coreui/icons-react";
-import { cilPen, cilPlus, cilTrash, cilBan } from "@coreui/icons";
+import { cilPen, cilPlus, cilTrash, cilBan, cilSearch } from "@coreui/icons";
 import CustomerModal from "../../../components/customers/CustomerModal";
 import api from "../../../api/api";
 
@@ -56,6 +63,7 @@ const CustomerDetail = () => {
   const navigate = useNavigate();
   const [customer, setCustomer] = useState(state?.customer || null);
   const [sales, setSales] = useState([]);
+  const [groupedSales, setGroupedSales] = useState([]);
   const [cariMovements, setCariMovements] = useState([]);
   const [balance, setBalance] = useState({ total: 0, status: 'neutral' });
   const [offers, setOffers] = useState([]);
@@ -106,6 +114,16 @@ const CustomerDetail = () => {
   const [products, setProducts] = useState([]);
   const [selectedSales, setSelectedSales] = useState([]);
   const [userId, setUserId] = useState(getUserId());
+  const [activeTab, setActiveTab] = useState("sales");
+const [invoicedSales, setInvoicedSales] = useState(() => {
+  const savedInvoicedSales = localStorage.getItem(`invoicedSales_${id}`);
+  return savedInvoicedSales ? new Set(JSON.parse(savedInvoicedSales)) : new Set();
+});
+  const [salesSearchTerm, setSalesSearchTerm] = useState(""); // Satışlar için arama terimi
+  const [groupedSalesSearchTerm, setGroupedSalesSearchTerm] = useState(""); // Gruplanmış satışlar için arama
+  const [cariSearchTerm, setCariSearchTerm] = useState(""); // Cari için arama
+  const [paymentsSearchTerm, setPaymentsSearchTerm] = useState(""); // Ödemeler için arama
+  const [branchesSearchTerm, setBranchesSearchTerm] = useState(""); // Şubeler için arama
 
   // localStorage değişikliklerini dinle ve userId'yi güncelle
   useEffect(() => {
@@ -123,7 +141,9 @@ const CustomerDetail = () => {
 
     return () => window.removeEventListener("storage", handleStorageChange);
   }, []);
-
+useEffect(() => {
+  localStorage.setItem(`invoicedSales_${id}`, JSON.stringify([...invoicedSales]));
+}, [invoicedSales, id]);
   const addToast = useCallback((message, type = "success") => {
     const toast = (
       <CToast key={Date.now()} autohide={true} visible={true} delay={5000}>
@@ -191,6 +211,56 @@ const CustomerDetail = () => {
     }
   }, [id, addToast]);
 
+// fetchGroupedSales fonksiyonunu güncelleyin
+const fetchGroupedSales = async () => {
+  try {
+    const { data } = await api.get(`${API_BASE_URL}/musteriSatis/musteriSatis-faturaget-all`);
+    
+    // API'den gelen faturaDurumu'nu kullan, yoksa localStorage'daki bilgiyi kullan
+    const enhancedData = data.map(sale => ({
+      ...sale,
+      faturaDurumu: sale.faturaDurumu !== undefined ? sale.faturaDurumu : 
+                   (invoicedSales.has(sale.satisId) ? 1 : 0)
+    }));
+    
+    setGroupedSales(enhancedData || []);
+  } catch (err) {
+    console.error("Gruplanmış satışları getirme hatası:", err);
+    addToast("Gruplanmış satışlar yüklenemedi.", "error");
+  }
+};
+
+// handleGenerateInvoice fonksiyonunu güncelleyin
+const handleGenerateInvoice = async (satisId) => {
+  if (!userId || userId === 0) {
+    addToast("Kullanıcı kimliği bulunamadı. Lütfen oturum açın.", "error");
+    return;
+  }
+  setLoading(true);
+  try {
+    const payload = [{ SatisId: satisId.toString() }];
+    const response = await api.post(`${API_BASE_URL}/FaturaEkle/generate-invoice-list`, payload);
+    if (response.status === 200 || response.data.success) {
+      addToast(`Satış ID ${satisId} için fatura oluşturuldu.`, "success");
+      setInvoicedSales((prev) => {
+        const newSet = new Set([...prev, satisId]);
+        return newSet;
+      });
+      
+      // Gruplanmış satışları güncelle
+      setGroupedSales(prev => prev.map(sale => 
+        sale.satisId === satisId ? {...sale, faturaDurumu: 1} : sale
+      ));
+    } else {
+      addToast("Fatura oluşturulamadı.", "error");
+    }
+  } catch (err) {
+    console.error("Fatura oluşturma hatası:", err);
+    addToast(err.response?.data?.message || "Fatura oluşturulamadı.", "error");
+  } finally {
+    setLoading(false);
+  }
+};
   const mapApiCustomer = async (apiCustomer) => {
     let classificationName = "Bilinmiyor";
     try {
@@ -613,6 +683,7 @@ const CustomerDetail = () => {
       fetchSales();
       fetchCariMovements();
       fetchBalance();
+      fetchGroupedSales();
     } catch (err) {
       addToast(err.response?.data?.message || "Satış kaydedilemedi.", "error");
     } finally {
@@ -645,6 +716,7 @@ const CustomerDetail = () => {
       fetchCariMovements();
       fetchBalance();
       fetchSales();
+      fetchGroupedSales();
     } catch (err) {
       addToast(err.response?.data?.message || "Ödeme kaydedilemedi.", "error");
     } finally {
@@ -780,6 +852,7 @@ const CustomerDetail = () => {
       fetchSales();
       fetchCariMovements();
       fetchBalance();
+      fetchGroupedSales();
     } catch (err) {
       addToast(err.response?.data?.message || "Satış güncellenemedi.", "error");
     } finally {
@@ -810,6 +883,7 @@ const CustomerDetail = () => {
       fetchSales();
       fetchCariMovements();
       fetchBalance();
+      fetchGroupedSales();
     } catch (err) {
       console.error("Satış İptal Hatası:", err);
       addToast(err.response?.data?.Message || "Satış iptal edilemedi.", "error");
@@ -851,6 +925,7 @@ const CustomerDetail = () => {
       fetchSales();
       fetchCariMovements();
       fetchBalance();
+      fetchGroupedSales();
     } catch (err) {
       addToast(err.response?.data?.message || "Satış silinemedi.", "error");
     } finally {
@@ -908,10 +983,18 @@ const CustomerDetail = () => {
       fetchProducts();
       fetchCariMovements();
       fetchBalance();
+      fetchGroupedSales();
     }
   }, [id]);
 
   const uniqueSatisIds = useMemo(() => [...new Set(sales.map(sale => sale.satisId))], [sales]);
+
+  // Filtrelemeler
+  const filteredSales = sales.filter(sale => sale.satisId.toString().includes(salesSearchTerm));
+  const filteredGroupedSales = groupedSales.filter(sale => sale.satisId.toString().includes(groupedSalesSearchTerm));
+  const filteredCariMovements = cariMovements.filter(movement => new Date(movement.tarih).toLocaleDateString().includes(cariSearchTerm) || movement.aciklama?.includes(cariSearchTerm));
+  const filteredPayments = payments.filter(payment => new Date(payment.tarih).toLocaleDateString().includes(paymentsSearchTerm) || payment.musteriSatisId?.toString().includes(paymentsSearchTerm));
+  const filteredBranches = branches.filter(branch => branch.adi?.includes(branchesSearchTerm) || branch.kodu?.includes(branchesSearchTerm));
 
   if (loading || !customer) {
     return (
@@ -955,6 +1038,7 @@ const CustomerDetail = () => {
                       width: "100px",
                       height: "100px",
                       objectFit: "cover",
+                      borderRadius: "8px",
                     }}
                   />
                 </CCol>
@@ -1134,193 +1218,368 @@ const CustomerDetail = () => {
           </div>
         </CCol>
         <CCol xs={12}>
-          <CRow>
-            {[
-              { title: "Önceki Satışlar", data: sales, type: "sales" },
-              { title: "Cari Hareketleri", data: cariMovements, type: "cari" },
-              { title: "Önceki Ödemeler", data: payments, type: "payments" },
-              { title: "Şubeler", data: branches, type: "branches" },
-            ].map((table) => (
-              <CCol key={table.title} className="mt-3">
-                <CCard>
-                  <CCardHeader
-                    style={{ backgroundColor: "#2965A8", color: "white" }}
-                  >
-                    {table.title}
-                  </CCardHeader>
-                  <CCardBody>
-                    <CTable responsive>
-                      <CTableHead>
-                        <CTableRow>
-                          {table.type === "branches" ? (
-                            <>
-                              <CTableHeaderCell>Şube Adı</CTableHeaderCell>
-                              <CTableHeaderCell>Adres</CTableHeaderCell>
-                              <CTableHeaderCell>Kod</CTableHeaderCell>
-                              <CTableHeaderCell>Aktif</CTableHeaderCell>
-                              <CTableHeaderCell>İşlemler</CTableHeaderCell>
-                            </>
-                          ) : table.type === "cari" ? (
-                            <>
-                              <CTableHeaderCell>Tarih</CTableHeaderCell>
-                              <CTableHeaderCell>Tür</CTableHeaderCell>
-                              <CTableHeaderCell>Açıklama</CTableHeaderCell>
-                              <CTableHeaderCell>Tutar</CTableHeaderCell>
-                              <CTableHeaderCell>Bakiye</CTableHeaderCell>
-                            </>
-                          ) : table.type === "sales" ? (
-                            <>
-                              <CTableHeaderCell>
-                                <CFormCheck
-                                  checked={selectedSales.length === uniqueSatisIds.length}
-                                  onChange={() =>
-                                    setSelectedSales(
-                                      selectedSales.length === uniqueSatisIds.length
-                                        ? []
-                                        : uniqueSatisIds
-                                    )
-                                  }
-                                />
-                              </CTableHeaderCell>
-                              <CTableHeaderCell>Satış ID</CTableHeaderCell>
-                              <CTableHeaderCell>Barkod</CTableHeaderCell>
-                              <CTableHeaderCell>Ürün Adı</CTableHeaderCell>
-                              <CTableHeaderCell>Fiyat</CTableHeaderCell>
-                              <CTableHeaderCell>Birim</CTableHeaderCell>
-                              <CTableHeaderCell>Miktar</CTableHeaderCell>
-                              <CTableHeaderCell>Toplam Fiyat</CTableHeaderCell>
-                              <CTableHeaderCell>Durumu</CTableHeaderCell>
-                              <CTableHeaderCell>İşlemler</CTableHeaderCell>
-                            </>
-                          ) : (
-                            <>
-                              <CTableHeaderCell>Tarih</CTableHeaderCell>
-                              <CTableHeaderCell>No</CTableHeaderCell>
-                              <CTableHeaderCell>Durum</CTableHeaderCell>
-                              <CTableHeaderCell>Tutar</CTableHeaderCell>
-                            </>
-                          )}
+          <CNav variant="tabs" role="tablist">
+            <CNavItem>
+              <CNavLink
+                active={activeTab === "sales"}
+                onClick={() => setActiveTab("sales")}
+              >
+                Önceki Satışlar
+              </CNavLink>
+            </CNavItem>
+            <CNavItem>
+              <CNavLink
+                active={activeTab === "groupedSales"}
+                onClick={() => setActiveTab("groupedSales")}
+              >
+                Gruplanmış Satışlar
+              </CNavLink>
+            </CNavItem>
+            <CNavItem>
+              <CNavLink
+                active={activeTab === "cari"}
+                onClick={() => setActiveTab("cari")}
+              >
+                Cari Hareketleri
+              </CNavLink>
+            </CNavItem>
+            <CNavItem>
+              <CNavLink
+                active={activeTab === "payments"}
+                onClick={() => setActiveTab("payments")}
+              >
+                Önceki Ödemeler
+              </CNavLink>
+            </CNavItem>
+            <CNavItem>
+              <CNavLink
+                active={activeTab === "branches"}
+                onClick={() => setActiveTab("branches")}
+              >
+                Şubeler
+              </CNavLink>
+            </CNavItem>
+          </CNav>
+          <CTabContent>
+            <CTabPane visible={activeTab === "sales"}>
+              <CCard>
+                <CCardHeader style={{ backgroundColor: "#2965A8", color: "white" }}>
+                  <CRow className="align-items-center">
+                    <CCol>Önceki Satışlar</CCol>
+                    <CCol xs={4}>
+                      <CInputGroup>
+                        <CInputGroupText><CIcon icon={cilSearch} /></CInputGroupText>
+                        <CFormInput
+                          placeholder="Satış ID Ara..."
+                          value={salesSearchTerm}
+                          onChange={(e) => setSalesSearchTerm(e.target.value)}
+                        />
+                      </CInputGroup>
+                    </CCol>
+                  </CRow>
+                </CCardHeader>
+                <CCardBody>
+                  <CTable responsive striped hover>
+                    <CTableHead color="dark">
+                      <CTableRow>
+                        <CTableHeaderCell>
+                          <CFormCheck
+                            checked={selectedSales.length === uniqueSatisIds.length}
+                            onChange={() =>
+                              setSelectedSales(
+                                selectedSales.length === uniqueSatisIds.length
+                                  ? []
+                                  : uniqueSatisIds
+                              )
+                            }
+                          />
+                        </CTableHeaderCell>
+                        <CTableHeaderCell>Satış ID</CTableHeaderCell>
+                        <CTableHeaderCell>Barkod</CTableHeaderCell>
+                        <CTableHeaderCell>Ürün Adı</CTableHeaderCell>
+                        <CTableHeaderCell>Fiyat</CTableHeaderCell>
+                        <CTableHeaderCell>Birim</CTableHeaderCell>
+                        <CTableHeaderCell>Miktar</CTableHeaderCell>
+                        <CTableHeaderCell>Toplam Fiyat</CTableHeaderCell>
+                        <CTableHeaderCell>Durumu</CTableHeaderCell>
+                        <CTableHeaderCell>İşlemler</CTableHeaderCell>
+                      </CTableRow>
+                    </CTableHead>
+                    <CTableBody>
+                      {filteredSales.map((sale) => (
+                        <CTableRow key={sale.id}>
+                          <CTableDataCell>
+                            <CFormCheck
+                              checked={selectedSales.includes(sale.satisId)}
+                              onChange={() => handleSelectSale(sale.satisId)}
+                            />
+                          </CTableDataCell>
+                          <CTableDataCell>{sale.satisId}</CTableDataCell>
+                          <CTableDataCell>{sale.barkod}</CTableDataCell>
+                          <CTableDataCell>{sale.urunAdi}</CTableDataCell>
+                          <CTableDataCell>{sale.fiyat.toLocaleString("tr-TR")} TRY</CTableDataCell>
+                          <CTableDataCell>{sale.birim}</CTableDataCell>
+                          <CTableDataCell>{sale.miktar}</CTableDataCell>
+                          <CTableDataCell>{sale.toplamFiyat.toLocaleString("tr-TR")} TRY</CTableDataCell>
+                          <CTableDataCell>{sale.durumu === 1 ? "Aktif" : "İptal"}</CTableDataCell>
+                          <CTableDataCell>
+                            <div className="d-flex gap-2">
+                              <CButton
+                                color="info"
+                                size="sm"
+                                onClick={() => handleEditSale(sale)}
+                                style={{ color: "white" }}
+                              >
+                                <CIcon icon={cilPen} />
+                              </CButton>
+                              <CButton
+                                color="danger"
+                                size="sm"
+                                onClick={() => handleDeleteSale(sale.id)}
+                                style={{ color: "white" }}
+                              >
+                                <CIcon icon={cilTrash} />
+                              </CButton>
+                              <CButton
+                                color="warning"
+                                size="sm"
+                                onClick={() => handleCancelSales(sale.satisId)}
+                                style={{ color: "white" }}
+                                disabled={sale.durumu === 0}
+                              >
+                                <CIcon icon={cilBan} />
+                              </CButton>
+                            </div>
+                          </CTableDataCell>
                         </CTableRow>
-                      </CTableHead>
-                      <CTableBody>
-                        {table.type === "branches"
-                          ? branches.map((branch) => (
-                              <CTableRow key={branch.id}>
-                                <CTableDataCell>
-                                  {branch.adi || "Bilinmiyor"}
-                                </CTableDataCell>
-                                <CTableDataCell>
-                                  {branch.adres || "Yok"}
-                                </CTableDataCell>
-                                <CTableDataCell>
-                                  {branch.kodu || "Yok"}
-                                </CTableDataCell>
-                                <CTableDataCell>
-                                  {branch.aktif ? "Evet" : "Hayır"}
-                                </CTableDataCell>
-                                <CTableDataCell>
-                                  <div className="d-flex gap-2">
-                                    <CButton
-                                      color="info"
-                                      size="sm"
-                                      onClick={() => handleEditBranch(branch)}
-                                      style={{ color: "white" }}
-                                    >
-                                      <CIcon icon={cilPen} />
-                                    </CButton>
-                                    <CButton
-                                      color="danger"
-                                      size="sm"
-                                      onClick={() => handleDeleteBranch(branch.id)}
-                                      style={{ color: "white" }}
-                                    >
-                                      <CIcon icon={cilTrash} />
-                                    </CButton>
-                                  </div>
-                                </CTableDataCell>
-                              </CTableRow>
-                            ))
-                          : table.type === "cari"
-                          ? cariMovements.map((movement, index) => (
-                              <CTableRow key={index}>
-                                <CTableDataCell>{new Date(movement.tarih).toLocaleDateString()}</CTableDataCell>
-                                <CTableDataCell>{movement.islemTuruId === 1001 ? 'Satış' : movement.islemTuruId === 1003 ? 'Ödeme' : 'Diğer'}</CTableDataCell>
-                                <CTableDataCell>{movement.aciklama || 'Yok'}</CTableDataCell>
-                                <CTableDataCell className={movement.tutar < 0 ? 'text-danger' : 'text-success'}>
-                                  {Math.abs(movement.tutar).toLocaleString("tr-TR")} TRY {movement.tutar < 0 ? '(Borç)' : '(Alacak)'}
-                                </CTableDataCell>
-                                <CTableDataCell>{movement.bakiye?.toLocaleString("tr-TR")} TRY</CTableDataCell>
-                              </CTableRow>
-                            ))
-                          : table.type === "sales"
-                          ? sales.map((sale) => (
-                              <CTableRow key={sale.id}>
-                                <CTableDataCell>
-                                  <CFormCheck
-                                    checked={selectedSales.includes(sale.satisId)}
-                                    onChange={() => handleSelectSale(sale.satisId)}
-                                  />
-                                </CTableDataCell>
-                                <CTableDataCell>{sale.satisId}</CTableDataCell>
-                                <CTableDataCell>{sale.barkod}</CTableDataCell>
-                                <CTableDataCell>{sale.urunAdi}</CTableDataCell>
-                                <CTableDataCell>{sale.fiyat}</CTableDataCell>
-                                <CTableDataCell>{sale.birim}</CTableDataCell>
-                                <CTableDataCell>{sale.miktar}</CTableDataCell>
-                                <CTableDataCell>{sale.toplamFiyat}</CTableDataCell>
-                                <CTableDataCell>{sale.durumu === 1 ? "Aktif" : "İptal"}</CTableDataCell>
-                                <CTableDataCell>
-                                  <div className="d-flex gap-2">
-                                    <CButton
-                                      color="info"
-                                      size="sm"
-                                      onClick={() => handleEditSale(sale)}
-                                      style={{ color: "white" }}
-                                    >
-                                      <CIcon icon={cilPen} />
-                                    </CButton>
-                                    <CButton
-                                      color="danger"
-                                      size="sm"
-                                      onClick={() => handleDeleteSale(sale.id)}
-                                      style={{ color: "white" }}
-                                    >
-                                      <CIcon icon={cilTrash} />
-                                    </CButton>
-                                    <CButton
-                                      color="warning"
-                                      size="sm"
-                                      onClick={() => handleCancelSales(sale.satisId)}
-                                      style={{ color: "white" }}
-                                      disabled={sale.durumu === 0}
-                                    >
-                                      <CIcon icon={cilBan} />
-                                    </CButton>
-                                  </div>
-                                </CTableDataCell>
-                              </CTableRow>
-                            ))
-                          : table.data.map((item, index) => (
-                              <CTableRow key={index}>
-                                <CTableDataCell>
-                                  {new Date(item.tarih).toLocaleDateString()}
-                                </CTableDataCell>
-                                <CTableDataCell>{item.musteriSatisId || "Yok"}</CTableDataCell>
-                                <CTableDataCell>
-                                  {item.islemTuruId === 1003 ? "Ödeme" : "Bilinmiyor"}
-                                </CTableDataCell>
-                                <CTableDataCell>
-                                  {(item.tutar || 0).toLocaleString("tr-TR")} TRY
-                                </CTableDataCell>
-                              </CTableRow>
-                            ))}
-                      </CTableBody>
-                    </CTable>
-                  </CCardBody>
-                </CCard>
-              </CCol>
-            ))}
-          </CRow>
+                      ))}
+                    </CTableBody>
+                  </CTable>
+                </CCardBody>
+              </CCard>
+            </CTabPane>
+            <CTabPane visible={activeTab === "groupedSales"}>
+              <CCard>
+                <CCardHeader style={{ backgroundColor: "#2965A8", color: "white" }}>
+                  <CRow className="align-items-center">
+                    <CCol>Gruplanmış Satışlar</CCol>
+                    <CCol xs={4}>
+                      <CInputGroup>
+                        <CInputGroupText><CIcon icon={cilSearch} /></CInputGroupText>
+                        <CFormInput
+                          placeholder="Satış ID Ara..."
+                          value={groupedSalesSearchTerm}
+                          onChange={(e) => setGroupedSalesSearchTerm(e.target.value)}
+                        />
+                      </CInputGroup>
+                    </CCol>
+                  </CRow>
+                </CCardHeader>
+                <CCardBody>
+                  <CTable responsive striped hover>
+                    <CTableHead color="dark">
+                      <CTableRow>
+                        <CTableHeaderCell>Satış ID</CTableHeaderCell>
+                        <CTableHeaderCell>Tarih</CTableHeaderCell>
+                        <CTableHeaderCell>Ürünler</CTableHeaderCell>
+                        <CTableHeaderCell>Birimler</CTableHeaderCell>
+                        <CTableHeaderCell>Toplam Fiyat</CTableHeaderCell>
+                        <CTableHeaderCell>İşlemler</CTableHeaderCell>
+                      </CTableRow>
+                    </CTableHead>
+                    <CTableBody>
+                      {filteredGroupedSales.map((sale) => (
+                        <CTableRow key={sale.satisId}>
+                          <CTableDataCell>{sale.satisId}</CTableDataCell>
+                          <CTableDataCell>
+                            {new Date(sale.eklenmeTarihi).toLocaleDateString()}
+                          </CTableDataCell>
+                          <CTableDataCell>{sale.urunAdi}</CTableDataCell>
+                          <CTableDataCell>{sale.birim}</CTableDataCell>
+                          <CTableDataCell>
+                            {(sale.toplamFiyat || 0).toLocaleString("tr-TR")} TRY
+                          </CTableDataCell>
+                          <CTableDataCell>
+                            <CButton
+                              color={sale.faturaDurumu === 1 ? "secondary" : "primary"}
+                              size="sm"
+                              onClick={() => sale.faturaDurumu === 0 && handleGenerateInvoice(sale.satisId)}
+                              style={{ color: "white" }}
+                              disabled={loading || sale.faturaDurumu === 1}
+                            >
+                              {sale.faturaDurumu === 1 ? "Fatura Kesildi" : "Fatura Kes"}
+                            </CButton>
+                          </CTableDataCell>
+                        </CTableRow>
+                      ))}
+                    </CTableBody>
+                  </CTable>
+                </CCardBody>
+              </CCard>
+            </CTabPane>
+            <CTabPane visible={activeTab === "cari"}>
+              <CCard>
+                <CCardHeader style={{ backgroundColor: "#2965A8", color: "white" }}>
+                  <CRow className="align-items-center">
+                    <CCol>Cari Hareketleri</CCol>
+                    <CCol xs={4}>
+                      <CInputGroup>
+                        <CInputGroupText><CIcon icon={cilSearch} /></CInputGroupText>
+                        <CFormInput
+                          placeholder="Tarih veya Açıklama Ara..."
+                          value={cariSearchTerm}
+                          onChange={(e) => setCariSearchTerm(e.target.value)}
+                        />
+                      </CInputGroup>
+                    </CCol>
+                  </CRow>
+                </CCardHeader>
+                <CCardBody>
+                  <CTable responsive striped hover>
+                    <CTableHead color="dark">
+                      <CTableRow>
+                        <CTableHeaderCell>Tarih</CTableHeaderCell>
+                        <CTableHeaderCell>Tür</CTableHeaderCell>
+                        <CTableHeaderCell>Açıklama</CTableHeaderCell>
+                        <CTableHeaderCell>Tutar</CTableHeaderCell>
+                        <CTableHeaderCell>Bakiye</CTableHeaderCell>
+                      </CTableRow>
+                    </CTableHead>
+                    <CTableBody>
+                      {filteredCariMovements.map((movement, index) => (
+                        <CTableRow key={index}>
+                          <CTableDataCell>{new Date(movement.tarih).toLocaleDateString()}</CTableDataCell>
+                          <CTableDataCell>{movement.islemTuruId === 1001 ? 'Satış' : movement.islemTuruId === 1003 ? 'Ödeme' : 'Diğer'}</CTableDataCell>
+                          <CTableDataCell>{movement.aciklama || 'Yok'}</CTableDataCell>
+                          <CTableDataCell className={movement.tutar < 0 ? 'text-danger' : 'text-success'}>
+                            {Math.abs(movement.tutar).toLocaleString("tr-TR")} TRY {movement.tutar < 0 ? '(Borç)' : '(Alacak)'}
+                          </CTableDataCell>
+                          <CTableDataCell>{movement.bakiye?.toLocaleString("tr-TR")} TRY</CTableDataCell>
+                        </CTableRow>
+                      ))}
+                    </CTableBody>
+                  </CTable>
+                </CCardBody>
+              </CCard>
+            </CTabPane>
+            <CTabPane visible={activeTab === "payments"}>
+              <CCard>
+                <CCardHeader style={{ backgroundColor: "#2965A8", color: "white" }}>
+                  <CRow className="align-items-center">
+                    <CCol>Önceki Ödemeler</CCol>
+                    <CCol xs={4}>
+                      <CInputGroup>
+                        <CInputGroupText><CIcon icon={cilSearch} /></CInputGroupText>
+                        <CFormInput
+                          placeholder="Tarih veya Satış No Ara..."
+                          value={paymentsSearchTerm}
+                          onChange={(e) => setPaymentsSearchTerm(e.target.value)}
+                        />
+                      </CInputGroup>
+                    </CCol>
+                  </CRow>
+                </CCardHeader>
+                <CCardBody>
+                  <CTable responsive striped hover>
+                    <CTableHead color="dark">
+                      <CTableRow>
+                        <CTableHeaderCell>Tarih</CTableHeaderCell>
+                        <CTableHeaderCell>No</CTableHeaderCell>
+                        <CTableHeaderCell>Durum</CTableHeaderCell>
+                        <CTableHeaderCell>Tutar</CTableHeaderCell>
+                      </CTableRow>
+                    </CTableHead>
+                    <CTableBody>
+                      {filteredPayments.map((item, index) => (
+                        <CTableRow key={index}>
+                          <CTableDataCell>
+                            {new Date(item.tarih).toLocaleDateString()}
+                          </CTableDataCell>
+                          <CTableDataCell>{item.musteriSatisId || "Yok"}</CTableDataCell>
+                          <CTableDataCell>
+                            {item.islemTuruId === 1003 ? "Ödeme" : "Bilinmiyor"}
+                          </CTableDataCell>
+                          <CTableDataCell>
+                            {(item.tutar || 0).toLocaleString("tr-TR")} TRY
+                          </CTableDataCell>
+                        </CTableRow>
+                      ))}
+                    </CTableBody>
+                  </CTable>
+                </CCardBody>
+              </CCard>
+            </CTabPane>
+            <CTabPane visible={activeTab === "branches"}>
+              <CCard>
+                <CCardHeader style={{ backgroundColor: "#2965A8", color: "white" }}>
+                  <CRow className="align-items-center">
+                    <CCol>Şubeler</CCol>
+                    <CCol xs={4}>
+                      <CInputGroup>
+                        <CInputGroupText><CIcon icon={cilSearch} /></CInputGroupText>
+                        <CFormInput
+                          placeholder="Şube Adı veya Kod Ara..."
+                          value={branchesSearchTerm}
+                          onChange={(e) => setBranchesSearchTerm(e.target.value)}
+                        />
+                      </CInputGroup>
+                    </CCol>
+                  </CRow>
+                </CCardHeader>
+                <CCardBody>
+                  <CTable responsive striped hover>
+                    <CTableHead color="dark">
+                      <CTableRow>
+                        <CTableHeaderCell>Şube Adı</CTableHeaderCell>
+                        <CTableHeaderCell>Adres</CTableHeaderCell>
+                        <CTableHeaderCell>Kod</CTableHeaderCell>
+                        <CTableHeaderCell>Aktif</CTableHeaderCell>
+                        <CTableHeaderCell>İşlemler</CTableHeaderCell>
+                      </CTableRow>
+                    </CTableHead>
+                    <CTableBody>
+                      {filteredBranches.map((branch) => (
+                        <CTableRow key={branch.id}>
+                          <CTableDataCell>
+                            {branch.adi || "Bilinmiyor"}
+                          </CTableDataCell>
+                          <CTableDataCell>
+                            {branch.adres || "Yok"}
+                          </CTableDataCell>
+                          <CTableDataCell>
+                            {branch.kodu || "Yok"}
+                          </CTableDataCell>
+                          <CTableDataCell>
+                            {branch.aktif ? "Evet" : "Hayır"}
+                          </CTableDataCell>
+                          <CTableDataCell>
+                            <div className="d-flex gap-2">
+                              <CButton
+                                color="info"
+                                size="sm"
+                                onClick={() => handleEditBranch(branch)}
+                                style={{ color: "white" }}
+                              >
+                                <CIcon icon={cilPen} />
+                              </CButton>
+                              <CButton
+                                color="danger"
+                                size="sm"
+                                onClick={() => handleDeleteBranch(branch.id)}
+                                style={{ color: "white" }}
+                              >
+                                <CIcon icon={cilTrash} />
+                              </CButton>
+                            </div>
+                          </CTableDataCell>
+                        </CTableRow>
+                      ))}
+                    </CTableBody>
+                  </CTable>
+                </CCardBody>
+              </CCard>
+            </CTabPane>
+          </CTabContent>
         </CCol>
       </CRow>
 
@@ -1476,7 +1735,7 @@ const CustomerDetail = () => {
           </CButton>
         </CModalFooter>
       </CModal>
-
+{/* Sale Modal */}
       <CModal visible={showSaleModal} onClose={() => setShowSaleModal(false)} size="xl">
         <CModalHeader>
           <CModalTitle>Satış Yap</CModalTitle>
@@ -1528,291 +1787,7 @@ const CustomerDetail = () => {
                   {saleFormData.urunId &&
                     depots[saleFormData.urunId]?.map((depot) => (
                       <option key={depot.depoId} value={depot.depoId}>
-                        {depot.depo?.adi || "Bilinmeyen Depo"} (Stok: {depot.miktar})
-                      </option>
-                    ))}
-                </CFormSelect>
-              </CCol>
-            </CRow>
-            <CRow className="mb-3">
-              <CCol md={4}>
-                <CFormLabel>Fiyat</CFormLabel>
-                <CFormInput
-                  name="fiyat"
-                  type="number"
-                  step="0.01"
-                  value={saleFormData.fiyat}
-                  onChange={handleSaleFormChange}
-                />
-              </CCol>
-              <CCol md={4}>
-                <CFormLabel>Birim</CFormLabel>
-                <CFormSelect
-                  name="birim"
-                  value={saleFormData.birim}
-                  onChange={handleSaleFormChange}
-                >
-                  <option value="adet">Adet</option>
-                  <option value="kg">Kg</option>
-                  <option value="lt">Lt</option>
-                  <option value="m">Metre</option>
-                </CFormSelect>
-              </CCol>
-              <CCol md={4}>
-                <CFormLabel>Miktar</CFormLabel>
-                <CFormInput
-                  name="miktar"
-                  type="number"
-                  step="0.01"
-                  value={saleFormData.miktar}
-                  onChange={handleSaleFormChange}
-                />
-              </CCol>
-            </CRow>
-            <CRow className="mb-3">
-              <CCol>
-                <CFormLabel>Toplam Fiyat</CFormLabel>
-                <CFormInput
-                  value={saleFormData.toplamFiyat}
-                  readOnly
-                  disabled
-                />
-              </CCol>
-            </CRow>
-            <CRow className="mb-3">
-              <CCol>
-                <CButton color="primary" onClick={handleAddSaleItem}>
-                  Ürün Ekle
-                </CButton>
-              </CCol>
-            </CRow>
-            <CTable responsive>
-              <CTableHead>
-                <CTableRow>
-                  <CTableHeaderCell>Barkod</CTableHeaderCell>
-                  <CTableHeaderCell>Ürün Adı</CTableHeaderCell>
-                  <CTableHeaderCell>Fiyat</CTableHeaderCell>
-                  <CTableHeaderCell>Birim</CTableHeaderCell>
-                  <CTableHeaderCell>Depo</CTableHeaderCell>
-                  <CTableHeaderCell>Miktar</CTableHeaderCell>
-                  <CTableHeaderCell>Toplam Fiyat</CTableHeaderCell>
-                  <CTableHeaderCell>İşlemler</CTableHeaderCell>
-                </CTableRow>
-              </CTableHead>
-              <CTableBody>
-                {saleItems.map((item, index) => {
-                  const productDepots = item.urunId ? depots[item.urunId] || [] : [];
-                  return (
-                    <CTableRow key={item.id}>
-                      <CTableDataCell>{item.barkod}</CTableDataCell>
-                      <CTableDataCell>{item.urunAdi}</CTableDataCell>
-                      <CTableDataCell>{item.fiyat}</CTableDataCell>
-                      <CTableDataCell>{item.birim}</CTableDataCell>
-                      <CTableDataCell>
-                        <CFormSelect
-                          value={item.depoId}
-                          onChange={(e) => handleDepotChange(index, e.target.value)}
-                        >
-                          <option value="">Depo Seçin</option>
-                          {productDepots.map((depo) => (
-                            <option key={depo.depoId} value={depo.depoId}>
-                              {depo.depo?.adi || "Bilinmeyen Depo"} (Stok: {depo.miktar})
-                            </option>
-                          ))}
-                        </CFormSelect>
-                      </CTableDataCell>
-                      <CTableDataCell>{item.miktar}</CTableDataCell>
-                      <CTableDataCell>{item.toplamFiyat}</CTableDataCell>
-                      <CTableDataCell>
-                        <CButton
-                          color="danger"
-                          size="sm"
-                          onClick={() => handleDeleteSaleItem(item.id)}
-                        >
-                          Sil
-                        </CButton>
-                      </CTableDataCell>
-                    </CTableRow>
-                  );
-                })}
-              </CTableBody>
-            </CTable>
-            <CRow>
-              <CCol>
-                <strong>Toplam: {calculateTotalPrice()} TRY</strong>
-              </CCol>
-            </CRow>
-          </CForm>
-        </CModalBody>
-        <CModalFooter>
-          <CButton color="secondary" onClick={() => setShowSaleModal(false)}>
-            İptal
-          </CButton>
-          <CButton
-            color="primary"
-            onClick={handleSaveSales}
-            disabled={loading || saleItems.length === 0 || saleItems.some((item) => !item.depoId) || !userId || userId === 0}
-          >
-            Satışı Kaydet
-          </CButton>
-        </CModalFooter>
-      </CModal>
-
-      <CModal visible={showPaymentModal} onClose={() => setShowPaymentModal(false)} size="lg">
-        <CModalHeader>
-          <CModalTitle>Ödeme Al</CModalTitle>
-        </CModalHeader>
-        <CModalBody>
-          <CForm>
-            <CRow className="mb-3">
-              <CCol>
-                <CFormLabel>Ödeme Yapılacak Satışı Seçin (Opsiyonel)</CFormLabel>
-                <CTable responsive>
-                  <CTableHead>
-                    <CTableRow>
-                      <CTableHeaderCell>Seç</CTableHeaderCell>
-                      <CTableHeaderCell>Satış No</CTableHeaderCell>
-                      <CTableHeaderCell>Tarih</CTableHeaderCell>
-                      <CTableHeaderCell>Toplam Tutar</CTableHeaderCell>
-                    </CTableRow>
-                  </CTableHead>
-                  <CTableBody>
-                    {sales.filter(s => s.durumu === 1).map((sale) => {
-                      const odenenToplam = cariMovements
-                        .filter(m => m.musteriSatisId === sale.id && m.islemTuruId === 1003)
-                        .reduce((sum, m) => sum + m.tutar, 0);
-                      
-                      const kalanBorc = (sale.toplamFiyat || 0) - odenenToplam;
-                      
-                      return (
-                        <CTableRow key={sale.id}>
-                          <CTableDataCell>
-                            <CFormCheck
-                              checked={paymentFormData.musteriSatisId === sale.id}
-                              onChange={() => handleSelectSaleForPayment(sale.id)}
-                              disabled={kalanBorc <= 0}
-                            />
-                          </CTableDataCell>
-                          <CTableDataCell>{sale.satisId}</CTableDataCell>
-                          <CTableDataCell>
-                            {new Date(sale.eklenmeTarihi).toLocaleDateString()}
-                          </CTableDataCell>
-                          <CTableDataCell>
-                            {(sale.toplamFiyat || 0).toLocaleString("tr-TR")} TRY
-                          </CTableDataCell>
-                        </CTableRow>
-                      );
-                    })}
-                  </CTableBody>
-                </CTable>
-              </CCol>
-            </CRow>
-
-            <CRow className="mb-3">
-              <CCol>
-                <CFormLabel>Tutar (TRY)</CFormLabel>
-                <CFormInput
-                  name="tutar"
-                  type="number"
-                  step="0.01"
-                  value={paymentFormData.tutar}
-                  onChange={handlePaymentFormChange}
-                  required
-                />
-              </CCol>
-            </CRow>
-            <CRow className="mb-3">
-              <CCol>
-                <CFormLabel>Açıklama</CFormLabel>
-                <CFormInput
-                  name="aciklama"
-                  value={paymentFormData.aciklama}
-                  onChange={handlePaymentFormChange}
-                />
-              </CCol>
-            </CRow>
-            
-            {paymentFormData.musteriSatisId && (
-              <CRow className="mb-3">
-                <CCol>
-                  <div className="alert alert-info">
-                    <strong>Seçili Satış:</strong> {paymentFormData.musteriSatisId}
-                  </div>
-                </CCol>
-              </CRow>
-            )}
-          </CForm>
-        </CModalBody>
-        <CModalFooter>
-          <CButton color="secondary" onClick={() => setShowPaymentModal(false)}>
-            İptal
-          </CButton>
-          <CButton
-            color="success"
-            onClick={handleSavePayment}
-            disabled={loading || !paymentFormData.tutar || !userId || userId === 0}
-          >
-            Ödemeyi Kaydet
-          </CButton>
-        </CModalFooter>
-      </CModal>
-
-      <CModal
-        visible={showSaleUpdateModal}
-        onClose={() => setShowSaleUpdateModal(false)}
-        size="xl"
-      >
-        <CModalHeader>
-          <CModalTitle>Satış Güncelle</CModalTitle>
-        </CModalHeader>
-        <CModalBody>
-          <CForm>
-            <CRow className="mb-3">
-              <CCol md={6}>
-                <CFormLabel>Ürün Seç</CFormLabel>
-                <CFormSelect
-                  name="urunId"
-                  value={saleFormData.urunId}
-                  onChange={handleSaleFormChange}
-                >
-                  <option value="">Ürün Seçin</option>
-                  {products.map((product) => (
-                    <option key={product.id} value={product.id}>
-                      {product.adi} (Barkod: {product.barkod}, Fiyat: {product.satisFiyat})
-                    </option>
-                  ))}
-                </CFormSelect>
-              </CCol>
-              <CCol md={6}>
-                <CFormLabel>Barkod</CFormLabel>
-                <CFormInput
-                  name="barkod"
-                  value={saleFormData.barkod}
-                  onChange={handleSaleFormChange}
-                />
-              </CCol>
-            </CRow>
-            <CRow className="mb-3">
-              <CCol md={6}>
-                <CFormLabel>Ürün Adı</CFormLabel>
-                <CFormInput
-                  name="urunAdi"
-                  value={saleFormData.urunAdi}
-                  onChange={handleSaleFormChange}
-                />
-              </CCol>
-              <CCol md={6}>
-                <CFormLabel>Depo</CFormLabel>
-                <CFormSelect
-                  name="depoId"
-                  value={saleFormData.depoId}
-                  onChange={handleSaleFormChange}
-                >
-                  <option value="">Depo Seçin</option>
-                  {saleFormData.urunId &&
-                    depots[saleFormData.urunId]?.map((depot) => (
-                      <option key={depot.depoId} value={depot.depoId}>
-                        {depot.depo?.adi || "Bilinmeyen Depo"} (Stok: {depot.miktar})
+                        {depot.depo?.adi || 'Bilinmeyen Depo'} (Stok: {depot.miktar})
                       </option>
                     ))}
                 </CFormSelect>
@@ -1866,36 +1841,29 @@ const CustomerDetail = () => {
           </CForm>
         </CModalBody>
         <CModalFooter>
-          <CButton
-            color="secondary"
-            onClick={() => setShowSaleUpdateModal(false)}
-          >
-            İptal
-          </CButton>
           <CButton
             color="primary"
             onClick={handleUpdateSale}
-            disabled={loading || !saleFormData.depoId || !userId || userId === 0}
+            disabled={loading || !saleFormData.depoId || !userId}
           >
             Güncelle
           </CButton>
         </CModalFooter>
       </CModal>
 
+      {/* Delete Customer Modal */}
       <CModal visible={showDeleteModal} onClose={() => setShowDeleteModal(false)}>
         <CModalHeader>
           <CModalTitle>Müşteriyi Sil</CModalTitle>
         </CModalHeader>
         <CModalBody>
-          <p>
-            {customer.name} adlı müşteriyi silmek istediğinizden emin misiniz?
-          </p>
+          <p>{customer.name} adlı müşteriyi silmek istediğinizden emin misiniz?</p>
         </CModalBody>
         <CModalFooter>
           <CButton color="secondary" onClick={() => setShowDeleteModal(false)}>
             İptal
           </CButton>
-          <CButton color="danger" onClick={handleDelete} disabled={loading || !userId || userId === 0}>
+          <CButton color="danger" onClick={handleDelete} disabled={loading || !userId}>
             Sil
           </CButton>
         </CModalFooter>

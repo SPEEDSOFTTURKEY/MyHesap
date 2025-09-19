@@ -401,7 +401,7 @@ export const AccountsProvider = ({ children }) => {
       eklenmeTarihi: accountData.eklenmeTarihi || new Date().toISOString(),
       kullaniciId: currentUserId,
     };
-    await api.put(`${API_BASE_URL}/Hesap/hesapp-update`, updatePayload);
+    await api.put(`${API_BASE_URL}/Hesap/hesap-update`, updatePayload);
   };
 
   const updateLocalStates = (updatedTransactions, newSenderBalance, newRecipientBalance, senderId, recipientId, transaction, relatedTransaction = null) => {
