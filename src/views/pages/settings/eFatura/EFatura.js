@@ -33,7 +33,7 @@ import { useRef, useState, useEffect } from "react";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 // Kullanıcı ID'sini localStorage'dan al
 const getUserId = () => {

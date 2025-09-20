@@ -24,7 +24,84 @@ import jsPDF from "jspdf"; // PDF generation
 import "jspdf-autotable"; // For table support in PDF
 
 // API base URL
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
+
+const registerRobotoFont = async (doc, fontType = 'normal') => {
+  try {
+    let fontPath, fontName, fontStyle;
+    
+    switch (fontType) {
+      case 'bold':
+        fontPath = '/fonts/Roboto-Bold.ttf';
+        fontName = 'Roboto';
+        fontStyle = 'bold';
+        break;
+      case 'italic':
+        fontPath = '/fonts/Roboto-Italic.ttf';
+        fontName = 'Roboto';
+        fontStyle = 'italic';
+        break;
+      default:
+        fontPath = '/fonts/Roboto-Regular.ttf';
+        fontName = 'Roboto';
+        fontStyle = 'normal';
+    }
+
+    console.log(`Attempting to fetch ${fontPath}...`);
+    const response = await fetch(fontPath);
+    
+    if (!response.ok) {
+      throw new Error(`Font file could not be loaded: ${response.statusText}`);
+    }
+    
+    const buffer = await response.arrayBuffer();
+    const fontData = new Uint8Array(buffer);
+    
+    // Base64 encoding
+    let binary = '';
+    for (let i = 0; i < fontData.byteLength; i++) {
+      binary += String.fromCharCode(fontData[i]);
+    }
+    
+    const base64 = btoa(binary);
+    const fileName = fontPath.split('/').pop();
+    
+    console.log(`Registering ${fontName} ${fontStyle} font...`);
+    
+    // Fontu kaydet
+    doc.addFileToVFS(fileName, base64);
+    doc.addFont(fileName, fontName, fontStyle);
+    
+    console.log(`${fontName} ${fontStyle} font registered successfully`);
+    return true;
+    
+  } catch (error) {
+    console.error("Font loading error:", error);
+    console.warn("Falling back to Times font");
+    
+    // Fallback to Times font for better Turkish character support
+    doc.setFont("times", fontType === 'bold' ? 'bold' : 'normal');
+    return false;
+  }
+};
+
+const registerAllFonts = async (doc) => {
+  try {
+    // Tüm font stillerini kaydet
+    await registerRobotoFont(doc, 'normal');
+    await registerRobotoFont(doc, 'bold');
+    await registerRobotoFont(doc, 'italic');
+    
+    // Varsayılan fontu ayarla
+    doc.setFont('Roboto', 'normal');
+    return true;
+    
+  } catch (error) {
+    console.error('Error registering all fonts:', error);
+    doc.setFont('times', 'normal');
+    return false;
+  }
+};
 
 const CustomerTurnoversReport = () => {
   const [formData, setFormData] = useState({
@@ -144,25 +221,41 @@ const CustomerTurnoversReport = () => {
     XLSX.utils.book_append_sheet(wb, ws, "Müşteri Ciroları");
 
     // Generate and download Excel file
-    XLSX.writeFile(wb, `MusteriCirolariRaporu_${formData.customer ? customers.find(c => c.id === formData.customer)?.unvani || 'Tumu' : 'Tumu'}.xlsx`);
+    const customerName = formData.customer 
+      ? customers.find(c => c.id === formData.customer)?.unvani || 'Tümü' 
+      : 'Tümü';
+    XLSX.writeFile(wb, `MüşteriCirolarıRaporu_${customerName}.xlsx`);
   };
 
-  const generatePDFReport = () => {
+  const generatePDFReport = async () => {
     // Ensure salesData is populated before generating PDF
     if (!salesData.length) {
       setError("PDF oluşturmak için veri yok.");
       return;
     }
 
-    const doc = new jsPDF();
+    const doc = new jsPDF({ 
+      orientation: "landscape", 
+      unit: "mm", 
+      format: "a4" 
+    });
+    
+    // Tüm fontları kaydet
+    await registerAllFonts(doc);
+    
+    // Başlık - Kalın font kullan
     doc.setFontSize(16);
+    doc.setFont('Roboto', 'bold');
     
     // Get customer name for title
     const customerName = formData.customer 
-      ? customers.find(c => c.id === formData.customer)?.unvani 
+      ? customers.find(c => c.id === formData.customer)?.unvani || "Seçili Müşteri"
       : "Tüm Müşteriler";
-    doc.text(`Müşteri Ciroları Raporu `, 14, 20);
+    doc.text(`Müşteri Ciroları Raporu - ${customerName}`, 14, 20);
 
+    // Normal fonta geri dön
+    doc.setFont('Roboto', 'normal');
+    
     // Define table columns and data
     const tableColumn = [
       "Tarih",
@@ -195,14 +288,33 @@ const CustomerTurnoversReport = () => {
       body: tableRows,
       startY: 30,
       theme: "grid",
-      headStyles: { fillColor: [41, 101, 168], textColor: [255, 255, 255] },
-      styles: { fontSize: 8 },
+      styles: { 
+        font: "Roboto",
+        fontSize: 8,
+        cellPadding: 3,
+        valign: 'middle'
+      },
+      headStyles: { 
+        fillColor: [41, 101, 168], 
+        textColor: [255, 255, 255], 
+        fontStyle: "bold",
+        font: "Roboto",
+        valign: 'middle'
+      },
+      // Font bulunamazsa fallback
+      didDrawPage: (data) => {
+        if (!doc.getFontList().Roboto) {
+          doc.setFont('times');
+        }
+      }
     });
 
     // Add summary statistics
     const finalY = doc.lastAutoTable.finalY + 10;
     doc.setFontSize(12);
+    doc.setFont('Roboto', 'bold');
     doc.text("Özet İstatistikler", 14, finalY);
+    doc.setFont('Roboto', 'normal');
     doc.text(
       `Toplam Satış: ${totalAmount.toFixed(2).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d))/g, ".")} TL`,
       14,
@@ -223,6 +335,114 @@ const CustomerTurnoversReport = () => {
     const pdfOutput = doc.output("blob");
     const url = URL.createObjectURL(pdfOutput);
     window.open(url, "_blank");
+  };
+
+  const handleDownloadPDF = async () => {
+    // Ensure salesData is populated before generating PDF
+    if (!salesData.length) {
+      setError("PDF indirmek için veri yok.");
+      return;
+    }
+
+    const doc = new jsPDF({ 
+      orientation: "landscape", 
+      unit: "mm", 
+      format: "a4" 
+    });
+    
+    // Tüm fontları kaydet
+    await registerAllFonts(doc);
+    
+    // Başlık - Kalın font kullan
+    doc.setFontSize(16);
+    doc.setFont('Roboto', 'bold');
+    
+    // Get customer name for title
+    const customerName = formData.customer 
+      ? customers.find(c => c.id === formData.customer)?.unvani || "Seçili Müşteri"
+      : "Tüm Müşteriler";
+    doc.text(`Müşteri Ciroları Raporu - ${customerName}`, 14, 20);
+
+    // Normal fonta geri dön
+    doc.setFont('Roboto', 'normal');
+    
+    // Define table columns and data
+    const tableColumn = [
+      "Tarih",
+      "Müşteri",
+      "Telefon",
+      "Adres",
+      "Ürün Adı",
+      "Birim",
+      "Miktar",
+      "Fiyat",
+      "Toplam Tutar",
+    ];
+    const tableRows = salesData.map((item) => [
+      item.eklenmeTarihi ? new Date(item.eklenmeTarihi).toLocaleDateString("tr-TR") : "-",
+      item.musteris?.unvani || "-",
+      item.musteris?.telefon || "-",
+      item.musteris?.adres || "-",
+      item.urunAdi || "-",
+      item.birim || "-",
+      item.miktar || 0,
+      item.fiyat ? `${item.fiyat.toFixed(2).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d))/g, ".")} TL` : "-",
+      item.toplamFiyat
+        ? `${item.toplamFiyat.toFixed(2).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d))/g, ".")} TL`
+        : "-",
+    ]);
+
+    // Add table to PDF
+    doc.autoTable({
+      head: [tableColumn],
+      body: tableRows,
+      startY: 30,
+      theme: "grid",
+      styles: { 
+        font: "Roboto",
+        fontSize: 8,
+        cellPadding: 3,
+        valign: 'middle'
+      },
+      headStyles: { 
+        fillColor: [41, 101, 168], 
+        textColor: [255, 255, 255], 
+        fontStyle: "bold",
+        font: "Roboto",
+        valign: 'middle'
+      },
+      // Font bulunamazsa fallback
+      didDrawPage: (data) => {
+        if (!doc.getFontList().Roboto) {
+          doc.setFont('times');
+        }
+      }
+    });
+
+    // Add summary statistics
+    const finalY = doc.lastAutoTable.finalY + 10;
+    doc.setFontSize(12);
+    doc.setFont('Roboto', 'bold');
+    doc.text("Özet İstatistikler", 14, finalY);
+    doc.setFont('Roboto', 'normal');
+    doc.text(
+      `Toplam Satış: ${totalAmount.toFixed(2).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d))/g, ".")} TL`,
+      14,
+      finalY + 10
+    );
+    doc.text(
+      `Ortalama Satış: ${averageAmount.toFixed(2).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d))/g, ".")} TL`,
+      14,
+      finalY + 20
+    );
+    doc.text(
+      `Belge Sayısı: ${documentCount}`,
+      14,
+      finalY + 30
+    );
+
+    // Download PDF
+    doc.save(`MüşteriCirolarıRaporu_${customerName}.pdf`);
   };
 
   const handleSubmit = async (e) => {
@@ -283,8 +503,8 @@ const CustomerTurnoversReport = () => {
               </CFormSelect>
             </CCol>
           </CRow>
-         <CRow className="mt-3">
-  <CCol className="d-flex justify-content-start gap-3">
+          <CRow className="mt-3">
+            <CCol className="d-flex justify-content-start gap-3">
               <CButton color="primary" type="submit" disabled={loading}>
                 Getir
               </CButton>
@@ -293,6 +513,9 @@ const CustomerTurnoversReport = () => {
               </CButton>
               <CButton color="info" onClick={handleGeneratePDF} disabled={loading}>
                 Raporla
+              </CButton>
+              <CButton color="warning" onClick={handleDownloadPDF} disabled={loading}>
+                PDF İndir
               </CButton>
             </CCol>
           </CRow>

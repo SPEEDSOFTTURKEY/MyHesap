@@ -42,7 +42,7 @@ import { useNavigate } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
 import { useUsers } from "../../../context/UsersContext";
 import api from "../../../api/api";
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 const Expenses = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -351,7 +351,7 @@ const Expenses = () => {
     }
     try {
       const fileName = arsiv.replace(/\\/g, "/").split("/").pop();
-      const baseUrl = "https://localhost:44375"; // Sunucu adresiniz
+      const baseUrl = "https://speedsofttest.com"; // Sunucu adresiniz
       const fileUrl = `${baseUrl}/arsiv/${fileName}`; // Doğru klasör: /arsiv/
 
       console.log("Arsiv:", arsiv);

@@ -44,7 +44,7 @@ import { cilPen, cilPlus, cilTrash, cilBan, cilSearch } from "@coreui/icons";
 import CustomerModal from "../../../components/customers/CustomerModal";
 import api from "../../../api/api";
 
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 // Kullanıcı ID'sini localStorage'dan al
 const getUserId = () => {
@@ -1044,7 +1044,7 @@ const CustomerDetail = () => {
                   <img
                     src={
                       customer.image
-                        ? `https://localhost:44375/${customer.image}`
+                        ? `https://speedsofttest.com/${customer.image}`
                         : "https://via.placeholder.com/100"
                     }
                     alt="Müşteri resmi"

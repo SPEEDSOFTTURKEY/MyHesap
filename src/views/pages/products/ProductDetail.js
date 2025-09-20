@@ -31,7 +31,7 @@ import { cilPencil, cilList, cilTrash } from "@coreui/icons";
 import ProductModal from "../../../components/products/ProductModal";
 import StockMovementModal from "../../../components/products/StockMovementModal";
 import api from "../../../api/api";
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 const ProductDetail = () => {
   const { id } = useParams();
@@ -340,7 +340,7 @@ const ProductDetail = () => {
                     product.images[0].trim() !== "" ? (
                       <>
                         <img
-                          src={`https://localhost:44375/${product.images[0]}`}
+                          src={`https://speedsofttest.com/${product.images[0]}`}
                           alt={product.name}
                           style={{
                             maxWidth: "200px",

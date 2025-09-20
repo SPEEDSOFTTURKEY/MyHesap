@@ -47,7 +47,7 @@ import ErrorBoundary from "../../views/pages/products/ErrorBoundary";
 import { jsPDF } from "jspdf";
 import dayjs from "dayjs";
 
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 const api = axios.create({
   baseURL: API_BASE_URL,

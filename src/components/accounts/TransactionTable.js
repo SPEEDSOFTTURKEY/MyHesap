@@ -27,7 +27,7 @@ import api from "../../api/api";
 import dayjs from "dayjs";
 import "../../scss/style.scss";
 
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 const TransactionTable = () => {
   const {

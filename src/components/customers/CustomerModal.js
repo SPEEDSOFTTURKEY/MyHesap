@@ -15,7 +15,7 @@ import CustomerContact from "./CustomerContact";
 import CustomerOther from "./CustomerOther";
 import api from "../../api/api";
 
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 const CustomerModal = ({ visible, onClose, onSubmit, customer, addToast }) => {
   // Form verilerini başlangıçta müşteri verileriyle veya boş değerlerle doldur

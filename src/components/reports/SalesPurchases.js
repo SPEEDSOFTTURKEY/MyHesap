@@ -44,30 +44,30 @@ const reportCards = [
   //   icon: cilTruck,
   //   color: "#F39C12", // Orange
   // },
-  {
-    title: "İadeler",
-    path: "/app/sales-purchases/returns",
-    icon: cilActionRedo,
-    color: "#3498DB", // Light Blue
-  },
-  {
-    title: "Teklifler",
-    path: "/app/sales-purchases/offers",
-    icon: cilPaperPlane,
-    color: "#16A085", // Teal
-  },
+  // {
+  //   title: "İadeler",
+  //   path: "/app/sales-purchases/returns",
+  //   icon: cilActionRedo,
+  //   color: "#3498DB", // Light Blue
+  // },
+  // {
+  //   title: "Teklifler",
+  //   path: "/app/sales-purchases/offers",
+  //   icon: cilPaperPlane,
+  //   color: "#16A085", // Teal
+  // },
   {
     title: "6 Aylık Satışlar",
     path: "/app/sales-purchases/six-month-sales",
     icon: cilCalendar,
     color: "#E74C3C", // Bright Red
   },
-  {
-    title: "Stok-Satış Karşılama",
-    path: "/app/sales-purchases/stock-sales-coverage",
-    icon: cilStorage,
-    color: "#2ECC71", // Emerald
-  },
+  // {
+  //   title: "Stok-Satış Karşılama",
+  //   path: "/app/sales-purchases/stock-sales-coverage",
+  //   icon: cilStorage,
+  //   color: "#2ECC71", // Emerald
+  // },
 ];
 
 const SalesPurchases = () => {

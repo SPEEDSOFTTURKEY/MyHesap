@@ -18,7 +18,7 @@ import "jspdf-autotable";
 import api from "../../api/api";
 
 // API Base URL
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 // Türkçe karakter haritası
 const turkishCharMap = {

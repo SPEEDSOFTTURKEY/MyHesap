@@ -21,7 +21,7 @@ import CustomerFinancial from "../../../components/customers/CustomerFinancial";
 import CustomerContact from "../../../components/customers/CustomerContact";
 import CustomerOther from "../../../components/customers/CustomerOther";
 import api from "../../../api/api";
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 // Yeni müşteri ekleme sayfasını oluşturur
 const CustomerNew = () => {

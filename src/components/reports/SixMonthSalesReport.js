@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import {
   CCard,
@@ -30,7 +31,7 @@ import "jspdf-autotable";
 import * as XLSX from 'xlsx';
 import axios from "axios";
 
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 // Chart.js bileşenlerini kaydet
 ChartJS.register(
@@ -42,31 +43,89 @@ ChartJS.register(
   Legend
 );
 
-// Türkçe karakter haritası
-const turkishCharMap = {
-  'Ç': 'C', 'ç': 'c',
-  'Ğ': 'G', 'ğ': 'g',
-  'İ': 'I', 'ı': 'i',
-  'Ö': 'O', 'ö': 'o',
-  'Ş': 'S', 'ş': 's',
-  'Ü': 'U', 'ü': 'u'
-};
-
-// Türkçe karakterleri dönüştürme fonksiyonu
-const convertTurkishChars = (text) => {
-  if (!text) return text;
-  return text.replace(/[ÇçĞğİıÖöŞşÜü]/g, (char) => turkishCharMap[char] || char);
-};
-
-// Türkçe font ayarları (PDF için)
-const registerTurkishFont = (doc) => {
+const registerRobotoFont = async (doc, fontType = 'normal') => {
   try {
-    doc.setFont("times", "normal");
-    console.log("Times fontu kullanılıyor (Türkçe karakter desteği ile)");
+    let fontPath, fontName, fontStyle;
+    
+    switch (fontType) {
+      case 'bold':
+        fontPath = '/fonts/Roboto-Bold.ttf';
+        fontName = 'Roboto';
+        fontStyle = 'bold';
+        break;
+      case 'italic':
+        fontPath = '/fonts/Roboto-Italic.ttf';
+        fontName = 'Roboto';
+        fontStyle = 'italic';
+        break;
+      default:
+        fontPath = '/fonts/Roboto-Regular.ttf';
+        fontName = 'Roboto';
+        fontStyle = 'normal';
+    }
+
+    console.log(`Attempting to fetch ${fontPath}...`);
+    const response = await fetch(fontPath);
+    
+    if (!response.ok) {
+      throw new Error(`Font file could not be loaded: ${response.statusText}`);
+    }
+    
+    const buffer = await response.arrayBuffer();
+    const fontData = new Uint8Array(buffer);
+    
+    // Base64 encoding
+    let binary = '';
+    for (let i = 0; i < fontData.byteLength; i++) {
+      binary += String.fromCharCode(fontData[i]);
+    }
+    
+    const base64 = btoa(binary);
+    const fileName = fontPath.split('/').pop();
+    
+    console.log(`Registering ${fontName} ${fontStyle} font...`);
+    
+    // Fontu kaydet
+    doc.addFileToVFS(fileName, base64);
+    doc.addFont(fileName, fontName, fontStyle);
+    
+    console.log(`${fontName} ${fontStyle} font registered successfully`);
+    return true;
+    
   } catch (error) {
-    console.error("Font ayarlama hatası:", error);
-    doc.setFont("helvetica", "normal");
+    console.error("Font loading error:", error);
+    console.warn("Falling back to Times font");
+    
+    // Fallback to Times font for better Turkish character support
+    doc.setFont("times", fontType === 'bold' ? 'bold' : 'normal');
+    return false;
   }
+};
+
+const registerAllFonts = async (doc) => {
+  try {
+    // Tüm font stillerini kaydet
+    await registerRobotoFont(doc, 'normal');
+    await registerRobotoFont(doc, 'bold');
+    await registerRobotoFont(doc, 'italic');
+    
+    // Varsayılan fontu ayarla
+    doc.setFont('Roboto', 'normal');
+    return true;
+    
+  } catch (error) {
+    console.error('Error registering all fonts:', error);
+    doc.setFont('times', 'normal');
+    return false;
+  }
+};
+
+// Fiyatları formatlayan yardımcı fonksiyon
+const formatCurrency = (value) => {
+  if (!value && value !== 0) return "0,00 ₺";
+  return value.toFixed(2)
+    .replace('.', ',')
+    .replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ' ₺';
 };
 
 const SixMonthSalesReport = () => {
@@ -82,7 +141,9 @@ const SixMonthSalesReport = () => {
       setLoading(true);
       setError(null);
       try {
-        const response = await axios.get(`${API_BASE_URL}/musteriSatis/musteriSatis-last-six-months`);
+        const response = await axios.get(`${API_BASE_URL}/musteriSatis/musteriSatis-last-six-months`, {
+          headers: { "Cache-Control": "no-cache" }
+        });
         
         // API yanıtının formatını kontrol et ve uygun şekilde işle
         let data = [];
@@ -130,7 +191,7 @@ const SixMonthSalesReport = () => {
     }
   };
 
-  // Prepare data for the chart - HATA KONTROLLÜ
+  // Prepare data for the chart
   const monthlySales = Array(6).fill(0).map((_, index) => {
     const month = dayjs().subtract(5 - index, "month");
     
@@ -153,7 +214,7 @@ const SixMonthSalesReport = () => {
     labels: monthlySales.map(item => item.month),
     datasets: [
       {
-        label: convertTurkishChars('Toplam Satış (₺)'),
+        label: 'Toplam Satış (₺)',
         data: monthlySales.map(item => item.total),
         backgroundColor: [
           'rgba(54, 162, 235, 0.6)',
@@ -184,7 +245,7 @@ const SixMonthSalesReport = () => {
       },
       title: {
         display: true,
-        text: convertTurkishChars('Son 6 Ayın Aylık Satışları'),
+        text: 'Son 6 Ayın Aylık Satışları',
       },
     },
     scales: {
@@ -192,139 +253,291 @@ const SixMonthSalesReport = () => {
         beginAtZero: true,
         title: {
           display: true,
-          text: convertTurkishChars('Toplam Satış (₺)')
+          text: 'Toplam Satış (₺)'
         }
       },
       x: {
         title: {
           display: true,
-          text: convertTurkishChars('Ay')
+          text: 'Ay'
         }
       }
     },
   };
 
-  const generatePDFReport = () => {
-    const doc = new jsPDF({ orientation: "landscape" }); // Yatay format
-    registerTurkishFont(doc);
+  const generatePDFReport = async () => {
+    if (!Array.isArray(salesData) || salesData.length === 0) {
+      setError("PDF oluşturmak için veri yok.");
+      return;
+    }
 
-    doc.setFontSize(18);
-    const title = convertTurkishChars("6 Aylık Satış Raporu");
-    doc.text(title, 148.5, 15, { align: "center" }); // Ortalamak için 297mm/2
+    setLoading(true);
+    try {
+      const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
 
-    const currentDateTime = dayjs().format("DD/MM/YYYY HH:mm:ss");
-    doc.setFontSize(10);
-    doc.text(convertTurkishChars(`Oluşturulma Tarihi: ${currentDateTime}`), 148.5, 25, { align: "center" });
+      // Tüm fontları kaydet
+      await registerAllFonts(doc);
 
-    doc.setFontSize(14);
-    doc.text(convertTurkishChars("Satış Verileri"), 14, 35);
+      // Başlık
+      doc.setFontSize(18);
+      doc.setFont('Roboto', 'bold');
+      const title = "6 Aylık Satış Raporu";
+      doc.text(title, 148.5, 15, { align: "center" });
 
-    // salesData'nın dizi olduğundan emin ol
-    const tableData = Array.isArray(salesData) ? salesData.map(item => [
-      item.id || "N/A",
-      item.satisId || "N/A",
-      item.eklenmeTarihi ? dayjs(item.eklenmeTarihi).format("DD/MM/YYYY") : "N/A",
-      convertTurkishChars(item.musteris?.unvani || item.musteriUnvani || "Bilinmeyen Müşteri"),
-      item.toplamFiyat ? `${item.toplamFiyat.toFixed(2).replace('.', ',')} ₺` : "0,00 ₺"
-    ]) : [];
+      // Oluşturulma tarihi
+      doc.setFontSize(10);
+      doc.setFont('Roboto', 'normal');
+      const currentDateTime = dayjs().format("DD/MM/YYYY HH:mm:ss");
+      doc.text(`Oluşturulma Tarihi: ${currentDateTime}`, 148.5, 25, { align: "center" });
 
-    doc.autoTable({
-      startY: 40,
-      head: [[
-        convertTurkishChars("ID"),
-        convertTurkishChars("Satış ID"),
-        convertTurkishChars("Tarih"),
-        convertTurkishChars("Müşteri"),
-        convertTurkishChars("Tutar")
-      ]],
-      body: tableData,
-      theme: "grid",
-      headStyles: {
-        fillColor: [41, 101, 168],
-        fontStyle: "bold",
-        textColor: [255, 255, 255],
-      },
-      styles: {
-        font: "times",
-        fontStyle: "normal",
-        cellPadding: 3,
-        fontSize: 10,
-        overflow: 'linebreak',
-      },
-      columnStyles: {
-        0: { cellWidth: 20 },
-        1: { cellWidth: 50 },
-        2: { cellWidth: 40 },
-        3: { cellWidth: 100 },
-        4: { cellWidth: 50 },
-      },
-    });
+      // Satış verileri tablosu
+      doc.setFontSize(14);
+      doc.setFont('Roboto', 'bold');
+      doc.text("Satış Verileri", 14, 35);
+      doc.setFont('Roboto', 'normal');
 
-    const totalAmount = Array.isArray(salesData) ? salesData.reduce((sum, item) => sum + (item.toplamFiyat || 0), 0) : 0;
-    const averageAmount = Array.isArray(salesData) && salesData.length ? totalAmount / salesData.length : 0;
-    const documentCount = Array.isArray(salesData) ? salesData.length : 0;
+      const tableData = salesData.map(item => [
+        item.id || "N/A",
+        item.satisId || "N/A",
+        item.eklenmeTarihi ? dayjs(item.eklenmeTarihi).format("DD/MM/YYYY") : "N/A",
+        item.musteris?.unvani || item.musteriUnvani || "Bilinmeyen Müşteri",
+        formatCurrency(item.toplamFiyat)
+      ]);
 
-    const formatCurrency = (value) => {
-      return value.toFixed(2)
-        .replace('.', ',')
-        .replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ' ₺';
-    };
+      doc.autoTable({
+        startY: 40,
+        head: [["ID", "Satış ID", "Tarih", "Müşteri", "Tutar"]],
+        body: tableData,
+        theme: "grid",
+        headStyles: {
+          fillColor: [41, 101, 168],
+          fontStyle: "bold",
+          textColor: [255, 255, 255],
+          font: "Roboto",
+          valign: 'middle'
+        },
+        styles: {
+          font: "Roboto",
+          fontStyle: "normal",
+          cellPadding: 3,
+          fontSize: 10,
+          overflow: 'linebreak',
+        },
+        columnStyles: {
+          0: { cellWidth: 20 },
+          1: { cellWidth: 50 },
+          2: { cellWidth: 40 },
+          3: { cellWidth: 100 },
+          4: { cellWidth: 50 },
+        },
+        didDrawPage: (data) => {
+          if (!doc.getFontList().Roboto) {
+            doc.setFont('times');
+          }
+        }
+      });
 
-    const summaryData = [
-      [convertTurkishChars("Toplam Satış"), formatCurrency(totalAmount)],
-      [convertTurkishChars("Ortalama Satış"), formatCurrency(averageAmount)],
-      [convertTurkishChars("Belge Sayısı"), `${documentCount} adet`],
-    ];
+      // Özet tablosu
+      const totalAmount = salesData.reduce((sum, item) => sum + (item.toplamFiyat || 0), 0);
+      const averageAmount = salesData.length ? totalAmount / salesData.length : 0;
+      const documentCount = salesData.length;
 
-    doc.setFontSize(14);
-    doc.text(convertTurkishChars("Özet"), 14, doc.autoTable.previous.finalY + 15);
+      const summaryData = [
+        ["Toplam Satış", formatCurrency(totalAmount)],
+        ["Ortalama Satış", formatCurrency(averageAmount)],
+        ["Belge Sayısı", `${documentCount} adet`],
+      ];
 
-    doc.autoTable({
-      startY: doc.autoTable.previous.finalY + 20,
-      body: summaryData,
-      theme: "grid",
-      headStyles: {
-        fillColor: [41, 101, 168],
-        fontStyle: "bold",
-        textColor: [255, 255, 255],
-      },
-      styles: {
-        font: "times",
-        fontStyle: "normal",
-        cellPadding: 3,
-        fontSize: 10,
-        overflow: 'linebreak',
-      },
-      columnStyles: {
-        0: { cellWidth: 70, fontStyle: "bold" },
-        1: { cellWidth: 70 },
-      },
-    });
+      doc.setFontSize(14);
+      doc.setFont('Roboto', 'bold');
+      doc.text("Özet", 14, doc.autoTable.previous.finalY + 15);
+      doc.setFont('Roboto', 'normal');
 
-    const pdfOutput = doc.output("blob");
-    const pdfUrl = URL.createObjectURL(pdfOutput);
-    window.open(pdfUrl, "_blank");
+      doc.autoTable({
+        startY: doc.autoTable.previous.finalY + 20,
+        body: summaryData,
+        theme: "grid",
+        headStyles: {
+          fillColor: [41, 101, 168],
+          fontStyle: "bold",
+          textColor: [255, 255, 255],
+          font: "Roboto",
+          valign: 'middle'
+        },
+        styles: {
+          font: "Roboto",
+          fontStyle: "normal",
+          cellPadding: 3,
+          fontSize: 10,
+          overflow: 'linebreak',
+        },
+        columnStyles: {
+          0: { cellWidth: 70, fontStyle: "bold" },
+          1: { cellWidth: 70 },
+        },
+        didDrawPage: (data) => {
+          if (!doc.getFontList().Roboto) {
+            doc.setFont('times');
+          }
+        }
+      });
+
+      // PDF'i yeni sekmede aç
+      const pdfOutput = doc.output("blob");
+      const pdfUrl = URL.createObjectURL(pdfOutput);
+      window.open(pdfUrl, "_blank");
+    } catch (err) {
+      console.error("PDF oluşturma hatası:", err);
+      setError("PDF oluşturulamadı! Hata: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDownloadPDF = async () => {
+    if (!Array.isArray(salesData) || salesData.length === 0) {
+      setError("PDF indirmek için veri yok.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+
+      // Tüm fontları kaydet
+      await registerAllFonts(doc);
+
+      // Başlık
+      doc.setFontSize(18);
+      doc.setFont('Roboto', 'bold');
+      const title = "6 Aylık Satış Raporu";
+      doc.text(title, 148.5, 15, { align: "center" });
+
+      // Oluşturulma tarihi
+      doc.setFontSize(10);
+      doc.setFont('Roboto', 'normal');
+      const currentDateTime = dayjs().format("DD/MM/YYYY HH:mm:ss");
+      doc.text(`Oluşturulma Tarihi: ${currentDateTime}`, 148.5, 25, { align: "center" });
+
+      // Satış verileri tablosu
+      doc.setFontSize(14);
+      doc.setFont('Roboto', 'bold');
+      doc.text("Satış Verileri", 14, 35);
+      doc.setFont('Roboto', 'normal');
+
+      const tableData = salesData.map(item => [
+        item.id || "N/A",
+        item.satisId || "N/A",
+        item.eklenmeTarihi ? dayjs(item.eklenmeTarihi).format("DD/MM/YYYY") : "N/A",
+        item.musteris?.unvani || item.musteriUnvani || "Bilinmeyen Müşteri",
+        formatCurrency(item.toplamFiyat)
+      ]);
+
+      doc.autoTable({
+        startY: 40,
+        head: [["ID", "Satış ID", "Tarih", "Müşteri", "Tutar"]],
+        body: tableData,
+        theme: "grid",
+        headStyles: {
+          fillColor: [41, 101, 168],
+          fontStyle: "bold",
+          textColor: [255, 255, 255],
+          font: "Roboto",
+          valign: 'middle'
+        },
+        styles: {
+          font: "Roboto",
+          fontStyle: "normal",
+          cellPadding: 3,
+          fontSize: 10,
+          overflow: 'linebreak',
+        },
+        columnStyles: {
+          0: { cellWidth: 20 },
+          1: { cellWidth: 50 },
+          2: { cellWidth: 40 },
+          3: { cellWidth: 100 },
+          4: { cellWidth: 50 },
+        },
+        didDrawPage: (data) => {
+          if (!doc.getFontList().Roboto) {
+            doc.setFont('times');
+          }
+        }
+      });
+
+      // Özet tablosu
+      const totalAmount = salesData.reduce((sum, item) => sum + (item.toplamFiyat || 0), 0);
+      const averageAmount = salesData.length ? totalAmount / salesData.length : 0;
+      const documentCount = salesData.length;
+
+      const summaryData = [
+        ["Toplam Satış", formatCurrency(totalAmount)],
+        ["Ortalama Satış", formatCurrency(averageAmount)],
+        ["Belge Sayısı", `${documentCount} adet`],
+      ];
+
+      doc.setFontSize(14);
+      doc.setFont('Roboto', 'bold');
+      doc.text("Özet", 14, doc.autoTable.previous.finalY + 15);
+      doc.setFont('Roboto', 'normal');
+
+      doc.autoTable({
+        startY: doc.autoTable.previous.finalY + 20,
+        body: summaryData,
+        theme: "grid",
+        headStyles: {
+          fillColor: [41, 101, 168],
+          fontStyle: "bold",
+          textColor: [255, 255, 255],
+          font: "Roboto",
+          valign: 'middle'
+        },
+        styles: {
+          font: "Roboto",
+          fontStyle: "normal",
+          cellPadding: 3,
+          fontSize: 10,
+          overflow: 'linebreak',
+        },
+        columnStyles: {
+          0: { cellWidth: 70, fontStyle: "bold" },
+          1: { cellWidth: 70 },
+        },
+        didDrawPage: (data) => {
+          if (!doc.getFontList().Roboto) {
+            doc.setFont('times');
+          }
+        }
+      });
+
+      // PDF'i indir
+      doc.save(`6_Aylık_Satış_Raporu_${dayjs().format("YYYYMMDD_HHmmss")}.pdf`);
+    } catch (err) {
+      console.error("PDF indirme hatası:", err);
+      setError("PDF indirilemedi! Hata: " + err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const generateExcelReport = () => {
-    // Excel için veri hazırlama
-    const tableData = Array.isArray(salesData) ? salesData.map(item => ({
+    if (!Array.isArray(salesData) || salesData.length === 0) {
+      setError("Excel oluşturmak için veri yok.");
+      return;
+    }
+
+    const tableData = salesData.map(item => ({
       ID: item.id || "N/A",
       "Satış ID": item.satisId || "N/A",
       Tarih: item.eklenmeTarihi ? dayjs(item.eklenmeTarihi).format("DD/MM/YYYY") : "N/A",
-      Müşteri: convertTurkishChars(item.musteris?.unvani || item.musteriUnvani || "Bilinmeyen Müşteri"),
-      Tutar: item.toplamFiyat ? `${item.toplamFiyat.toFixed(2).replace('.', ',')} ₺` : "0,00 ₺"
-    })) : [];
+      Müşteri: item.musteris?.unvani || item.musteriUnvani || "Bilinmeyen Müşteri",
+      Tutar: formatCurrency(item.toplamFiyat)
+    }));
 
-    const totalAmount = Array.isArray(salesData) ? salesData.reduce((sum, item) => sum + (item.toplamFiyat || 0), 0) : 0;
-    const averageAmount = Array.isArray(salesData) && salesData.length ? totalAmount / salesData.length : 0;
-    const documentCount = Array.isArray(salesData) ? salesData.length : 0;
-
-    const formatCurrency = (value) => {
-      return value.toFixed(2)
-        .replace('.', ',')
-        .replace(/\B(?=(\d{3})+(?!\d))/g, '.') + ' ₺';
-    };
+    const totalAmount = salesData.reduce((sum, item) => sum + (item.toplamFiyat || 0), 0);
+    const averageAmount = salesData.length ? totalAmount / salesData.length : 0;
+    const documentCount = salesData.length;
 
     const summaryData = [
       { Kriter: "Toplam Satış", Değer: formatCurrency(totalAmount) },
@@ -344,54 +557,57 @@ const SixMonthSalesReport = () => {
     XLSX.utils.book_append_sheet(wb, wsSummary, "Özet");
 
     // Excel dosyasını oluştur ve indir
-    const fileName = `6_Aylik_Satis_Raporu_${dayjs().format("YYYYMMDD_HHmmss")}.xlsx`;
+    const fileName = `6_Aylık_Satış_Raporu_${dayjs().format("YYYYMMDD_HHmmss")}.xlsx`;
     XLSX.writeFile(wb, fileName);
   };
 
   return (
     <CCard>
       <CCardHeader style={{ backgroundColor: "#2965A8", color: "#fff" }}>
-        {convertTurkishChars("6 Aylık Satış Raporu")}
+        6 Aylık Satış Raporu
       </CCardHeader>
       <CCardBody>
         <CRow className="mb-3">
           <CCol md={6}>
             <CFormInput
-              placeholder={convertTurkishChars("Tabloda Ara...")}
+              placeholder="Tabloda Ara..."
               value={searchTerm}
               onChange={handleSearch}
             />
           </CCol>
           <CCol md={6} className="text-end">
-            <CButton color="primary" onClick={generatePDFReport} className="me-2">
-              {convertTurkishChars("PDF Oluştur")}
+            <CButton color="info" onClick={generatePDFReport} className="me-2" disabled={loading}>
+              Raporla
             </CButton>
-            <CButton color="success" onClick={generateExcelReport}>
-              {convertTurkishChars("Excel Oluştur")}
+            <CButton color="success" onClick={handleDownloadPDF} className="me-2" disabled={loading}>
+              PDF İndir
+            </CButton>
+            <CButton color="warning" onClick={generateExcelReport} disabled={loading}>
+              Excel İndir
             </CButton>
           </CCol>
         </CRow>
 
         {/* Sales Data Table */}
-        <h4 className="mt-4">{convertTurkishChars("Son 6 Ayın Satış Verileri")}</h4>
+        <h4 className="mt-4">Son 6 Ayın Satış Verileri</h4>
         {error && (
           <div className="alert alert-danger">
             {error}
           </div>
         )}
         {loading ? (
-          <p>{convertTurkishChars("Yükleniyor...")}</p>
+          <p>Yükleniyor...</p>
         ) : (
           <>
             {Array.isArray(filteredData) && filteredData.length > 0 ? (
               <CTable striped hover>
                 <CTableHead>
                   <CTableRow>
-                    <CTableHeaderCell>{convertTurkishChars("ID")}</CTableHeaderCell>
-                    <CTableHeaderCell>{convertTurkishChars("Satış ID")}</CTableHeaderCell>
-                    <CTableHeaderCell>{convertTurkishChars("Tarih")}</CTableHeaderCell>
-                    <CTableHeaderCell>{convertTurkishChars("Müşteri")}</CTableHeaderCell>
-                    <CTableHeaderCell>{convertTurkishChars("Tutar")}</CTableHeaderCell>
+                    <CTableHeaderCell>ID</CTableHeaderCell>
+                    <CTableHeaderCell>Satış ID</CTableHeaderCell>
+                    <CTableHeaderCell>Tarih</CTableHeaderCell>
+                    <CTableHeaderCell>Müşteri</CTableHeaderCell>
+                    <CTableHeaderCell>Tutar</CTableHeaderCell>
                   </CTableRow>
                 </CTableHead>
                 <CTableBody>
@@ -400,20 +616,20 @@ const SixMonthSalesReport = () => {
                       <CTableDataCell>{item.id || "N/A"}</CTableDataCell>
                       <CTableDataCell>{item.satisId || "N/A"}</CTableDataCell>
                       <CTableDataCell>{item.eklenmeTarihi ? dayjs(item.eklenmeTarihi).format("DD/MM/YYYY") : "N/A"}</CTableDataCell>
-                      <CTableDataCell>{convertTurkishChars(item.musteris?.unvani || item.musteriUnvani || "Bilinmeyen Müşteri")}</CTableDataCell>
-                      <CTableDataCell>{item.toplamFiyat ? `${item.toplamFiyat.toFixed(2).replace('.', ',')} ₺` : "0,00 ₺"}</CTableDataCell>
+                      <CTableDataCell>{item.musteris?.unvani || item.musteriUnvani || "Bilinmeyen Müşteri"}</CTableDataCell>
+                      <CTableDataCell>{formatCurrency(item.toplamFiyat)}</CTableDataCell>
                     </CTableRow>
                   ))}
                 </CTableBody>
               </CTable>
             ) : (
-              <p>{convertTurkishChars("Satış verisi bulunamadı.")}</p>
+              <p>Satış verisi bulunamadı.</p>
             )}
           </>
         )}
 
         {/* Monthly Sales Chart */}
-        <h4 className="mt-4">{convertTurkishChars("Aylık Satış İstatistikleri")}</h4>
+        <h4 className="mt-4">Aylık Satış İstatistikleri</h4>
         <div style={{ height: '400px', marginBottom: '20px' }}>
           <Bar data={chartData} options={chartOptions} />
         </div>

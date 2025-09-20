@@ -49,7 +49,7 @@ const EmployeeForm = ({ employee, onSubmit, onCancel, onDelete }) => {
   const [photoPreview, setPhotoPreview] = useState(null);
   const [errors, setErrors] = useState({});
 
-  const BASE_PHOTO_URL = "https://localhost:44375";
+  const BASE_PHOTO_URL = "https://speedsofttest.com";
 
   const getPhotoUrl = (foto) => {
     console.log("getPhotoUrl called with foto:", foto);

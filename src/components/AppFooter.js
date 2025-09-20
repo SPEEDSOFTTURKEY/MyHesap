@@ -6,7 +6,7 @@ const AppFooter = () => {
     <CFooter className="px-4">
       <div className="ms-auto">
         <span className="me-1">2025 &#169; Designed by </span>
-        <a href="https://speedsoft.com.tr" target="_blank" rel="noopener noreferrer">
+        <a href="https://soft.com.tr" target="_blank" rel="noopener noreferrer">
           SpeedSoft
         </a>
       </div>

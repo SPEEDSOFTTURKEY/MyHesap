@@ -9,7 +9,7 @@ import {
 } from "@coreui/react";
 import api from "../../api/api";
 
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 const CustomerOther = ({ formData, handleChange }) => {
   const [classifications, setClassifications] = useState([]);

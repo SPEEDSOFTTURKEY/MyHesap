@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import {
   CCard,
@@ -23,43 +24,95 @@ import "jspdf-autotable";
 import * as XLSX from "xlsx";
 import dayjs from "dayjs";
 
-// Türkçe karakter haritası
-const turkishCharMap = {
-  Ç: "C",
-  ç: "c",
-  Ğ: "G",
-  ğ: "g",
-  İ: "I",
-  ı: "i",
-  Ö: "O",
-  ö: "o",
-  Ş: "S",
-  ş: "s",
-  Ü: "U",
-  ü: "u",
-};
-
-const convertTurkishChars = (text) => {
-  if (!text) return text;
-  return text.replace(
-    /[ÇçĞğİıÖöŞşÜü]/g,
-    (char) => turkishCharMap[char] || char
-  );
-};
-
-const registerTurkishFont = (doc) => {
-  try {
-    doc.setFont("times", "normal");
-  } catch (error) {
-    doc.setFont("helvetica", "normal");
-  }
-};
-
-const API_BASE_URL = "https://localhost:44375/api";
+// API base URL
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 const api = axios.create({
   baseURL: API_BASE_URL,
 });
+
+// Fiyatları formatlayan yardımcı fonksiyon
+const formatPrice = (value) => {
+  if (!value && value !== 0) return "-";
+  return `${value.toFixed(2).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d))/g, ".")} TL`;
+};
+
+const registerRobotoFont = async (doc, fontType = 'normal') => {
+  try {
+    let fontPath, fontName, fontStyle;
+    
+    switch (fontType) {
+      case 'bold':
+        fontPath = '/fonts/Roboto-Bold.ttf';
+        fontName = 'Roboto';
+        fontStyle = 'bold';
+        break;
+      case 'italic':
+        fontPath = '/fonts/Roboto-Italic.ttf';
+        fontName = 'Roboto';
+        fontStyle = 'italic';
+        break;
+      default:
+        fontPath = '/fonts/Roboto-Regular.ttf';
+        fontName = 'Roboto';
+        fontStyle = 'normal';
+    }
+
+    console.log(`Attempting to fetch ${fontPath}...`);
+    const response = await fetch(fontPath);
+    
+    if (!response.ok) {
+      throw new Error(`Font file could not be loaded: ${response.statusText}`);
+    }
+    
+    const buffer = await response.arrayBuffer();
+    const fontData = new Uint8Array(buffer);
+    
+    // Base64 encoding
+    let binary = '';
+    for (let i = 0; i < fontData.byteLength; i++) {
+      binary += String.fromCharCode(fontData[i]);
+    }
+    
+    const base64 = btoa(binary);
+    const fileName = fontPath.split('/').pop();
+    
+    console.log(`Registering ${fontName} ${fontStyle} font...`);
+    
+    // Fontu kaydet
+    doc.addFileToVFS(fileName, base64);
+    doc.addFont(fileName, fontName, fontStyle);
+    
+    console.log(`${fontName} ${fontStyle} font registered successfully`);
+    return true;
+    
+  } catch (error) {
+    console.error("Font loading error:", error);
+    console.warn("Falling back to Times font");
+    
+    // Fallback to Times font for better Turkish character support
+    doc.setFont("times", fontType === 'bold' ? 'bold' : 'normal');
+    return false;
+  }
+};
+
+const registerAllFonts = async (doc) => {
+  try {
+    // Tüm font stillerini kaydet
+    await registerRobotoFont(doc, 'normal');
+    await registerRobotoFont(doc, 'bold');
+    await registerRobotoFont(doc, 'italic');
+    
+    // Varsayılan fontu ayarla
+    doc.setFont('Roboto', 'normal');
+    return true;
+    
+  } catch (error) {
+    console.error('Error registering all fonts:', error);
+    doc.setFont('times', 'normal');
+    return false;
+  }
+};
 
 const ProductSalesReport = () => {
   const [formData, setFormData] = useState({
@@ -80,7 +133,6 @@ const ProductSalesReport = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Fetch data for dropdowns
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
@@ -103,7 +155,7 @@ const ProductSalesReport = () => {
     fetchData();
   }, []);
 
-  // Fetch table data
+  // Table verisi çek
   useEffect(() => {
     const fetchTableData = async () => {
       if (!formData.transactionType || (formData.transactionType === "purchases" && !formData.supplier)) {
@@ -206,60 +258,201 @@ const ProductSalesReport = () => {
     setSelected(displayedData.length === selected.length ? [] : displayedData.map((item) => item.id));
   };
 
-  const handleExportPDF = () => {
+  const handleGeneratePDF = async () => {
     if (tableData.length === 0) {
       alert("Rapor için veri bulunamadı!");
       return;
     }
-    const selectedData = tableData.filter((item) => selected.includes(item.id));
+    
+    const selectedData = selected.length > 0 
+      ? tableData.filter((item) => selected.includes(item.id))
+      : tableData;
+    
     if (selectedData.length === 0) {
       alert("Lütfen en az bir satır seçiniz!");
       return;
     }
+    
     setLoading(true);
+    
     try {
-      const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
-      registerTurkishFont(doc);
-
+      console.log("Starting PDF generation...");
+      
+      const doc = new jsPDF({ 
+        orientation: "landscape", 
+        unit: "mm", 
+        format: "a4" 
+      });
+      
+      // Tüm fontları kaydet
+      await registerAllFonts(doc);
+      
+      // Başlık - Kalın font kullan
       doc.setFontSize(18);
+      doc.setFont('Roboto', 'bold');
       doc.text(
-        formData.transactionType === "sales" ? "Ürün Satış Raporu" : "Ürün Alış Raporu",
-        doc.internal.pageSize.getWidth() / 2,
-        15,
+        formData.transactionType === "sales" ? "Ürün Satış Raporu" : "Ürün Alış Raporu", 
+        doc.internal.pageSize.getWidth() / 2, 
+        15, 
         { align: "center" }
       );
-
+      
+      // Normal fonta geri dön
+      doc.setFont('Roboto', 'normal');
+      
+      // Tablo başlıkları
       const head = formData.transactionType === "purchases"
         ? [["ID", "Ürün", "Barkod", "Tarih", "Tedarikçi", "Miktar", "Birim Fiyat", "İndirim (%)", "Toplam", "KDV (%)", "Para Birimi", "Belge No", "Vade Tarih", "Depo"]]
         : [["ID", "Ürün", "Barkod", "Tarih", "Müşteri", "Miktar", "Birim Fiyat", "Toplam"]];
-
+      
+      // Tablo verileri - Türkçe karakterler korunuyor
       const body = selectedData.map((item, index) =>
         formData.transactionType === "purchases"
           ? [
               index + 1,
-              convertTurkishChars(item.urun?.adi || "-"),
+              item.urun?.adi || "-",
               item.urun?.barkod || "-",
               dayjs(item.tarih || item.eklenmeTarihi).format("DD/MM/YYYY"),
-              convertTurkishChars(item.tedarikci?.unvan || "-"),
+              item.tedarikci?.unvan || "-",
               item.miktar || 0,
-              item.fiyat || 0,
+              formatPrice(item.fiyat),
               item.indirim || 0,
-              item.toplam || 0,
+              formatPrice(item.toplam),
               item.kDV || 0,
               item.paraBirimi || "TRY",
               item.belgeNo || "-",
               item.vadeTarih ? dayjs(item.vadeTarih).format("DD/MM/YYYY") : "-",
-              convertTurkishChars(item.depo?.adi || "-"),
+              item.depo?.adi || "-",
             ]
           : [
               index + 1,
-              convertTurkishChars(item.urunAdi || "-"),
+              item.urunAdi || "-",
               item.barkod || "-",
               dayjs(item.eklenmeTarihi).format("DD/MM/YYYY"),
-              convertTurkishChars(item.musteris?.unvani || "-"),
+              item.musteris?.unvani || "-",
               item.miktar || 0,
-              item.fiyat || 0,
-              item.toplamFiyat || 0,
+              formatPrice(item.fiyat),
+              formatPrice(item.toplamFiyat),
+            ]
+      );
+
+      console.log("Generating autoTable...");
+      
+      doc.autoTable({
+        startY: 25,
+        head,
+        body,
+        theme: "grid",
+        styles: { 
+          font: "Roboto",
+          fontSize: 9, 
+          cellPadding: 3,
+          valign: 'middle'
+        },
+        headStyles: { 
+          fillColor: [41, 101, 168], 
+          textColor: [255, 255, 255], 
+          fontStyle: "bold",
+          font: "Roboto",
+          valign: 'middle'
+        },
+        // Font bulunamazsa fallback
+        didDrawPage: (data) => {
+          if (!doc.getFontList().Roboto) {
+            doc.setFont('times');
+          }
+        }
+      });
+
+      console.log("Table generated, opening in new tab...");
+      
+      // PDF'i blob olarak al ve yeni sekmede aç
+      const pdfBlob = doc.output('blob');
+      const pdfUrl = URL.createObjectURL(pdfBlob);
+      window.open(pdfUrl, '_blank');
+      
+      console.log("PDF opened in new tab successfully");
+      
+    } catch (err) {
+      console.error("PDF creation error:", err);
+      alert("PDF oluşturulamadı! Hata: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDownloadPDF = async () => {
+    if (tableData.length === 0) {
+      alert("Rapor için veri bulunamadı!");
+      return;
+    }
+    
+    const selectedData = selected.length > 0 
+      ? tableData.filter((item) => selected.includes(item.id))
+      : tableData;
+    
+    if (selectedData.length === 0) {
+      alert("Lütfen en az bir satır seçiniz!");
+      return;
+    }
+    
+    setLoading(true);
+    
+    try {
+      const doc = new jsPDF({ 
+        orientation: "landscape", 
+        unit: "mm", 
+        format: "a4" 
+      });
+      
+      // Tüm fontları kaydet
+      await registerAllFonts(doc);
+      
+      // Başlık
+      doc.setFontSize(18);
+      doc.setFont('Roboto', 'bold');
+      doc.text(
+        formData.transactionType === "sales" ? "Ürün Satış Raporu" : "Ürün Alış Raporu", 
+        doc.internal.pageSize.getWidth() / 2, 
+        15, 
+        { align: "center" }
+      );
+      
+      doc.setFont('Roboto', 'normal');
+      
+      // Tablo başlıkları
+      const head = formData.transactionType === "purchases"
+        ? [["ID", "Ürün", "Barkod", "Tarih", "Tedarikçi", "Miktar", "Birim Fiyat", "İndirim (%)", "Toplam", "KDV (%)", "Para Birimi", "Belge No", "Vade Tarih", "Depo"]]
+        : [["ID", "Ürün", "Barkod", "Tarih", "Müşteri", "Miktar", "Birim Fiyat", "Toplam"]];
+      
+      // Tablo verileri - Türkçe karakterler korunuyor
+      const body = selectedData.map((item, index) =>
+        formData.transactionType === "purchases"
+          ? [
+              index + 1,
+              item.urun?.adi || "-",
+              item.urun?.barkod || "-",
+              dayjs(item.tarih || item.eklenmeTarihi).format("DD/MM/YYYY"),
+              item.tedarikci?.unvan || "-",
+              item.miktar || 0,
+              formatPrice(item.fiyat),
+              item.indirim || 0,
+              formatPrice(item.toplam),
+              item.kDV || 0,
+              item.paraBirimi || "TRY",
+              item.belgeNo || "-",
+              item.vadeTarih ? dayjs(item.vadeTarih).format("DD/MM/YYYY") : "-",
+              item.depo?.adi || "-",
+            ]
+          : [
+              index + 1,
+              item.urunAdi || "-",
+              item.barkod || "-",
+              dayjs(item.eklenmeTarihi).format("DD/MM/YYYY"),
+              item.musteris?.unvani || "-",
+              item.miktar || 0,
+              formatPrice(item.fiyat),
+              formatPrice(item.toplamFiyat),
             ]
       );
 
@@ -268,16 +461,31 @@ const ProductSalesReport = () => {
         head,
         body,
         theme: "grid",
-        styles: { font: "times", fontSize: 9, cellPadding: 3 },
-        headStyles: { fillColor: [41, 101, 168], textColor: [255, 255, 255], fontStyle: "bold" },
+        styles: { 
+          font: "Roboto",
+          fontSize: 9, 
+          cellPadding: 3,
+          valign: 'middle'
+        },
+        headStyles: { 
+          fillColor: [41, 101, 168], 
+          textColor: [255, 255, 255], 
+          fontStyle: "bold",
+          font: "Roboto",
+          valign: 'middle'
+        },
+        didDrawPage: (data) => {
+          if (!doc.getFontList().Roboto) {
+            doc.setFont('times');
+          }
+        }
       });
 
-      const pdfOutput = doc.output("blob");
-      const pdfUrl = URL.createObjectURL(pdfOutput);
-      window.open(pdfUrl, "_blank");
+      doc.save(`${formData.transactionType === "sales" ? "Satış_Raporu" : "Alış_Raporu"}_${dayjs().format('YYYYMMDD_HHmmss')}.pdf`);
+      
     } catch (err) {
-      console.error("PDF oluşturma hatası:", err);
-      alert("PDF oluşturulamadı!");
+      console.error("PDF download error:", err);
+      alert("PDF indirilemedi! Hata: " + err.message);
     } finally {
       setLoading(false);
     }
@@ -288,45 +496,50 @@ const ProductSalesReport = () => {
       alert("Rapor için veri bulunamadı!");
       return;
     }
-    const selectedData = tableData.filter((item) => selected.includes(item.id));
+    
+    const selectedData = selected.length > 0 
+      ? tableData.filter((item) => selected.includes(item.id))
+      : tableData;
+    
     if (selectedData.length === 0) {
       alert("Lütfen en az bir satır seçiniz!");
       return;
     }
+    
     const data = selectedData.map((item, index) =>
       formData.transactionType === "purchases"
         ? {
             ID: index + 1,
-            Ürün: convertTurkishChars(item.urun?.adi || "-"),
+            Ürün: item.urun?.adi || "-",
             Barkod: item.urun?.barkod || "-",
             Tarih: dayjs(item.tarih || item.eklenmeTarihi).format("DD/MM/YYYY"),
-            Tedarikçi: convertTurkishChars(item.tedarikci?.unvan || "-"),
+            Tedarikçi: item.tedarikci?.unvan || "-",
             Miktar: item.miktar || 0,
-            "Birim Fiyat": item.fiyat || 0,
+            "Birim Fiyat": formatPrice(item.fiyat),
             "İndirim (%)": item.indirim || 0,
-            Toplam: item.toplam || 0,
+            Toplam: formatPrice(item.toplam),
             "KDV (%)": item.kDV || 0,
             "Para Birimi": item.paraBirimi || "TRY",
             "Belge No": item.belgeNo || "-",
             "Vade Tarih": item.vadeTarih ? dayjs(item.vadeTarih).format("DD/MM/YYYY") : "-",
-            Depo: convertTurkishChars(item.depo?.adi || "-"),
+            Depo: item.depo?.adi || "-",
           }
         : {
             ID: index + 1,
-            Ürün: convertTurkishChars(item.urunAdi || "-"),
+            Ürün: item.urunAdi || "-",
             Barkod: item.barkod || "-",
             Tarih: dayjs(item.eklenmeTarihi).format("DD/MM/YYYY"),
-            Müşteri: convertTurkishChars(item.musteris?.unvani || "-"),
+            Müşteri: item.musteris?.unvani || "-",
             Miktar: item.miktar || 0,
-            "Birim Fiyat": item.fiyat || 0,
-            Toplam: item.toplamFiyat || 0,
+            "Birim Fiyat": formatPrice(item.fiyat),
+            Toplam: formatPrice(item.toplamFiyat),
           }
     );
 
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Rapor");
-    XLSX.writeFile(workbook, `${formData.transactionType === "sales" ? "Satis_Raporu" : "Alis_Raporu"}.xlsx`);
+    XLSX.writeFile(workbook, `${formData.transactionType === "sales" ? "Satış_Raporu" : "Alış_Raporu"}_${dayjs().format('YYYYMMDD_HHmmss')}.xlsx`);
   };
 
   const displayedData = tableData.filter((item) =>
@@ -376,7 +589,6 @@ const ProductSalesReport = () => {
                   disabled={loading}
                 />
               </CCol>
-  
               <CCol md={4}>
                 <CFormLabel className="text-sm font-medium text-gray-700">
                   {formData.transactionType === "sales" ? "Müşteri" : formData.transactionType === "purchases" ? "Tedarikçi" : "Müşteri/Tedarikçi"}
@@ -389,14 +601,14 @@ const ProductSalesReport = () => {
                   disabled={loading || !formData.transactionType}
                 >
                   <option value="">Seçiniz</option>
-              {(formData.transactionType === "sales" ? customers : suppliers).map((user) => (
-  <option key={user.id} value={formData.transactionType === "sales" ? user.Unvani : user.Unvan}>
-    {formData.transactionType === "sales" ? user.unvani : user.unvan}
-  </option>
-))}
-
+                  {(formData.transactionType === "sales" ? customers : suppliers).map((user) => (
+                    <option key={user.id} value={formData.transactionType === "sales" ? user.unvani : user.unvan}>
+                      {formData.transactionType === "sales" ? user.unvani : user.unvan}
+                    </option>
+                  ))}
                 </CFormSelect>
               </CCol>
+              {/* Depo seçimi şu anda yorum satırında, gerekirse açılabilir */}
               {/* <CCol md={4}>
                 <CFormLabel className="text-sm font-medium text-gray-700">Depo</CFormLabel>
                 <CFormSelect
@@ -420,7 +632,7 @@ const ProductSalesReport = () => {
                 color="primary"
                 className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-md"
                 disabled={loading}
-                onClick={handleExportPDF}
+                onClick={handleGeneratePDF}
               >
                 {loading ? "Yükleniyor..." : "Rapor Hazırla"}
               </CButton>
@@ -428,9 +640,17 @@ const ProductSalesReport = () => {
                 color="success"
                 className="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-md"
                 disabled={loading}
+                onClick={handleDownloadPDF}
+              >
+                PDF İndir
+              </CButton>
+              <CButton
+                color="warning"
+                className="bg-yellow-600 hover:bg-yellow-700 text-white font-semibold py-2 px-4 rounded-md"
+                disabled={loading}
                 onClick={handleExportExcel}
               >
-                {loading ? "Yükleniyor..." : "Excel Oluştur"}
+                Excel Oluştur
               </CButton>
             </div>
           </div>
@@ -482,13 +702,13 @@ const ProductSalesReport = () => {
                         />
                       </CTableDataCell>
                       <CTableDataCell className="p-3">{index + 1}</CTableDataCell>
-                      <CTableDataCell className="p-3">{convertTurkishChars(formData.transactionType === "purchases" ? item.urun?.adi || "-" : item.urunAdi || "-")}</CTableDataCell>
+                      <CTableDataCell className="p-3">{formData.transactionType === "purchases" ? item.urun?.adi || "-" : item.urunAdi || "-"}</CTableDataCell>
                       <CTableDataCell className="p-3">{formData.transactionType === "purchases" ? item.urun?.barkod || "-" : item.barkod || "-"}</CTableDataCell>
                       <CTableDataCell className="p-3">{dayjs(item.tarih || item.eklenmeTarihi).format("DD/MM/YYYY")}</CTableDataCell>
-                      <CTableDataCell className="p-3">{convertTurkishChars(formData.transactionType === "sales" ? item.musteris?.unvani || "-" : item.tedarikci?.unvan || "-")}</CTableDataCell>
+                      <CTableDataCell className="p-3">{formData.transactionType === "sales" ? item.musteris?.unvani || "-" : item.tedarikci?.unvan || "-"}</CTableDataCell>
                       <CTableDataCell className="p-3">{item.miktar || 0}</CTableDataCell>
-                      <CTableDataCell className="p-3">{item.fiyat || 0}</CTableDataCell>
-                      <CTableDataCell className="p-3">{formData.transactionType === "purchases" ? item.toplam || 0 : item.toplamFiyat || 0}</CTableDataCell>
+                      <CTableDataCell className="p-3">{formatPrice(item.fiyat)}</CTableDataCell>
+                      <CTableDataCell className="p-3">{formData.transactionType === "purchases" ? formatPrice(item.toplam) : formatPrice(item.toplamFiyat)}</CTableDataCell>
                       {formData.transactionType === "purchases" && (
                         <>
                           <CTableDataCell className="p-3">{item.indirim || 0}</CTableDataCell>
@@ -496,7 +716,7 @@ const ProductSalesReport = () => {
                           <CTableDataCell className="p-3">{item.paraBirimi || "TRY"}</CTableDataCell>
                           <CTableDataCell className="p-3">{item.belgeNo || "-"}</CTableDataCell>
                           <CTableDataCell className="p-3">{item.vadeTarih ? dayjs(item.vadeTarih).format("DD/MM/YYYY") : "-"}</CTableDataCell>
-                          <CTableDataCell className="p-3">{convertTurkishChars(item.depo?.adi || "-")}</CTableDataCell>
+                          <CTableDataCell className="p-3">{item.depo?.adi || "-"}</CTableDataCell>
                         </>
                       )}
                     </CTableRow>

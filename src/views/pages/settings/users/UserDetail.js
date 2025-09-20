@@ -27,7 +27,7 @@ import { cilSave, cilTrash, cilX } from "@coreui/icons";
 import { useUser } from "../../../../context/UserContext";
 import api from "../../../../api/api";
 import { IMaskInput } from "react-imask";
-const API_BASE_URL = "https://localhost:44375/api";
+const API_BASE_URL = "https://speedsofttest.com/api";
 
 const UserDetail = () => {
   const navigate = useNavigate();
