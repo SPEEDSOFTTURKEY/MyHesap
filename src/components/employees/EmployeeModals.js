@@ -18,7 +18,18 @@ import dayjs from "dayjs";
 import api from "../../api/api";
 import DatePickerField from "./DatePickerField";
 
-const API_BASE_URL = "https://speedsofttest.com/api";
+const API_BASE_URL = "https://localhost:44375/api";
+
+// Kullanıcı ID'sini almak için yardımcı fonksiyon
+const getUserId = () => {
+  try {
+    const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+    return user.id;
+  } catch (err) {
+    console.error("Kullanıcı ID'si alınırken hata:", err);
+    return 0;
+  }
+};
 
 const EmployeeModals = ({
   modalState,
@@ -217,6 +228,11 @@ const EmployeeModals = ({
 
   const handleAccrualSubmit = async (e) => {
     e.preventDefault();
+    const userId = getUserId();
+    if (!userId) {
+      addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "hata");
+      return;
+    }
     if (
       !accrualForm.amount ||
       !accrualForm.expenseMainCategoryId ||
@@ -239,11 +255,14 @@ const EmployeeModals = ({
         masrafAnaKategoriId: parseInt(accrualForm.expenseMainCategoryId),
         masrafAltKategoriId: parseInt(accrualForm.expenseSubCategoryId),
         calisanId: parseInt(employeeId),
-        durumu: 0, // Endpoint şemasına uygun
+        durumu: 0,
         aciklama: accrualForm.description || "Maaş/Prim tahakkuku",
         borc: 0,
         alacak: amount,
         bakiye: newBalance,
+        kullaniciId: userId,
+        ekleyenKullaniciId: userId,
+        guncelleyenKullaniciId: userId,
       };
 
       await api.post(`${API_BASE_URL}/calisancari/calisancari-create`, transactionObj);
@@ -276,6 +295,11 @@ const EmployeeModals = ({
 
   const handlePaymentSubmit = async (e) => {
     e.preventDefault();
+    const userId = getUserId();
+    if (!userId) {
+      addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "hata");
+      return;
+    }
     if (!paymentForm.accountId || !paymentForm.amount) {
       addToast("Hesap ve tutar zorunlu.", "hata");
       return;
@@ -294,11 +318,14 @@ const EmployeeModals = ({
         masrafAnaKategoriId: 0,
         masrafAltKategoriId: 0,
         calisanId: parseInt(employeeId),
-        durumu: 0, // Endpoint şemasına uygun
+        durumu: 0,
         aciklama: paymentForm.description || "Maaş/Prim/Avans ödemesi",
         borc: amount,
         alacak: 0,
         bakiye: newBalance,
+        kullaniciId: userId,
+        ekleyenKullaniciId: userId,
+        guncelleyenKullaniciId: userId,
       };
 
       await api.post(`${API_BASE_URL}/calisancari/calisancari-create`, transactionObj);
@@ -308,19 +335,23 @@ const EmployeeModals = ({
       );
       const hareketObj = {
         id: 0,
-        kullanicilarId: parseInt(employeeId),
+        kullanicilarId: userId, // Backend'in beklediği alan
         hesapId: parseInt(paymentForm.accountId),
         etkilenenHesapId: 0,
         hesapKategoriId: account.type,
         islemTarihi: new Date(paymentForm.date).toISOString(),
         islemTuruId: 2,
-        bilgi: paymentForm.description,
+        bilgi: paymentForm.description || "Maaş/Prim/Avans ödemesi",
         aciklama: "Maaş/Prim/Avans ödemesi",
-        borc: amount,
+        borc: amount, // Ödeme çıkış olduğu için borç olarak kaydedilir
         alacak: 0,
+        tutar: amount,
         bakiye: account.balance - amount,
         eklenmeTarihi: new Date().toISOString(),
         guncellenmeTarihi: new Date().toISOString(),
+        kullaniciId: userId,
+        ekleyenKullaniciId: userId,
+        guncelleyenKullaniciId: userId,
       };
 
       await api.post(`${API_BASE_URL}/hesapHareket/hesapHareket-create`, hareketObj);
@@ -356,6 +387,11 @@ const EmployeeModals = ({
 
   const handleAdvanceReturnSubmit = async (e) => {
     e.preventDefault();
+    const userId = getUserId();
+    if (!userId) {
+      addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "hata");
+      return;
+    }
     if (!advanceReturnForm.accountId || !advanceReturnForm.amount) {
       addToast("Hesap ve tutar zorunlu.", "hata");
       return;
@@ -374,11 +410,14 @@ const EmployeeModals = ({
         masrafAnaKategoriId: 0,
         masrafAltKategoriId: 0,
         calisanId: parseInt(employeeId),
-        durumu: 0, // Endpoint şemasına uygun
+        durumu: 0,
         aciklama: advanceReturnForm.description || "Avans iadesi",
         borc: 0,
         alacak: amount,
         bakiye: newBalance,
+        kullaniciId: userId,
+        ekleyenKullaniciId: userId,
+        guncelleyenKullaniciId: userId,
       };
 
       await api.post(`${API_BASE_URL}/calisancari/calisancari-create`, transactionObj);
@@ -388,19 +427,23 @@ const EmployeeModals = ({
       );
       const hareketObj = {
         id: 0,
-        kullanicilarId: parseInt(employeeId),
+        kullanicilarId: userId, // Backend'in beklediği alan
         hesapId: parseInt(advanceReturnForm.accountId),
         etkilenenHesapId: 0,
         hesapKategoriId: account.type,
         islemTarihi: new Date(advanceReturnForm.date).toISOString(),
         islemTuruId: 1,
-        bilgi: advanceReturnForm.description,
+        bilgi: advanceReturnForm.description || "Avans iadesi",
         aciklama: "Avans iadesi",
         borc: 0,
-        alacak: amount,
+        alacak: amount, // İade giriş olduğu için alacak olarak kaydedilir
+        tutar: amount,
         bakiye: account.balance + amount,
         eklenmeTarihi: new Date().toISOString(),
         guncellenmeTarihi: new Date().toISOString(),
+        kullaniciId: userId,
+        ekleyenKullaniciId: userId,
+        guncelleyenKullaniciId: userId,
       };
 
       await api.post(`${API_BASE_URL}/hesapHareket/hesapHareket-create`, hareketObj);
@@ -432,6 +475,11 @@ const EmployeeModals = ({
 
   const handleDebtCreditSubmit = async (e) => {
     e.preventDefault();
+    const userId = getUserId();
+    if (!userId) {
+      addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "hata");
+      return;
+    }
     if (!debtCreditForm.amount) {
       addToast("Tutar zorunlu.", "hata");
       return;
@@ -454,11 +502,14 @@ const EmployeeModals = ({
           parseInt(debtCreditForm.expenseMainCategoryId) || 0,
         masrafAltKategoriId: parseInt(debtCreditForm.expenseSubCategoryId) || 0,
         calisanId: parseInt(employeeId),
-        durumu: 0, // Endpoint şemasına uygun
+        durumu: 0,
         aciklama: debtCreditForm.description || "Borç/Alacak fişi",
         borc: isDebt ? amount : 0,
         alacak: isDebt ? 0 : amount,
         bakiye: newBalance,
+        kullaniciId: userId,
+        ekleyenKullaniciId: userId,
+        guncelleyenKullaniciId: userId,
       };
 
       await api.post(`${API_BASE_URL}/calisancari/calisancari-create`, transactionObj);
@@ -492,6 +543,11 @@ const EmployeeModals = ({
 
   const handleExpenseSubmit = async (e) => {
     e.preventDefault();
+    const userId = getUserId();
+    if (!userId) {
+      addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "hata");
+      return;
+    }
     if (
       !expenseForm.amount ||
       !expenseForm.expenseMainCategoryId ||
@@ -514,7 +570,7 @@ const EmployeeModals = ({
         masrafAnaKategoriId: parseInt(expenseForm.expenseMainCategoryId),
         masrafAltKategoriId: parseInt(expenseForm.expenseSubCategoryId),
         calisanId: parseInt(employeeId),
-        durumu: 0, // Endpoint şemasına uygun
+        durumu: 0,
         aciklama:
           expenseForm.description ||
           `Masraf kaydı: ${expenseForm.documentNumber}`,
@@ -523,6 +579,9 @@ const EmployeeModals = ({
         bakiye: newBalance,
         fisBelgeNo: expenseForm.documentNumber || "",
         kdvOrani: parseFloat(expenseForm.vatRate) || 0,
+        kullaniciId: userId,
+        ekleyenKullaniciId: userId,
+        guncelleyenKullaniciId: userId,
       };
 
       await api.post(`${API_BASE_URL}/calisancari/calisancari-create`, transactionObj);

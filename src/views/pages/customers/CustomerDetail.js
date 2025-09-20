@@ -57,6 +57,16 @@ const getUserId = () => {
   }
 };
 
+// Seçili EDM ID'sini localStorage'dan al
+const getSelectedEdmId = () => {
+  try {
+    return parseInt(localStorage.getItem("selectedEdmId")) || null;
+  } catch (err) {
+    console.error("Seçili EDM ID'si alınırken hata:", err);
+    return null;
+  }
+};
+
 const CustomerDetail = () => {
   const { id } = useParams();
   const { state } = useLocation();
@@ -115,15 +125,15 @@ const CustomerDetail = () => {
   const [selectedSales, setSelectedSales] = useState([]);
   const [userId, setUserId] = useState(getUserId());
   const [activeTab, setActiveTab] = useState("sales");
-const [invoicedSales, setInvoicedSales] = useState(() => {
-  const savedInvoicedSales = localStorage.getItem(`invoicedSales_${id}`);
-  return savedInvoicedSales ? new Set(JSON.parse(savedInvoicedSales)) : new Set();
-});
-  const [salesSearchTerm, setSalesSearchTerm] = useState(""); // Satışlar için arama terimi
-  const [groupedSalesSearchTerm, setGroupedSalesSearchTerm] = useState(""); // Gruplanmış satışlar için arama
-  const [cariSearchTerm, setCariSearchTerm] = useState(""); // Cari için arama
-  const [paymentsSearchTerm, setPaymentsSearchTerm] = useState(""); // Ödemeler için arama
-  const [branchesSearchTerm, setBranchesSearchTerm] = useState(""); // Şubeler için arama
+  const [invoicedSales, setInvoicedSales] = useState(() => {
+    const savedInvoicedSales = localStorage.getItem(`invoicedSales_${id}`);
+    return savedInvoicedSales ? new Set(JSON.parse(savedInvoicedSales)) : new Set();
+  });
+  const [salesSearchTerm, setSalesSearchTerm] = useState("");
+  const [groupedSalesSearchTerm, setGroupedSalesSearchTerm] = useState("");
+  const [cariSearchTerm, setCariSearchTerm] = useState("");
+  const [paymentsSearchTerm, setPaymentsSearchTerm] = useState("");
+  const [branchesSearchTerm, setBranchesSearchTerm] = useState("");
 
   // localStorage değişikliklerini dinle ve userId'yi güncelle
   useEffect(() => {
@@ -141,9 +151,11 @@ const [invoicedSales, setInvoicedSales] = useState(() => {
 
     return () => window.removeEventListener("storage", handleStorageChange);
   }, []);
-useEffect(() => {
-  localStorage.setItem(`invoicedSales_${id}`, JSON.stringify([...invoicedSales]));
-}, [invoicedSales, id]);
+
+  useEffect(() => {
+    localStorage.setItem(`invoicedSales_${id}`, JSON.stringify([...invoicedSales]));
+  }, [invoicedSales, id]);
+
   const addToast = useCallback((message, type = "success") => {
     const toast = (
       <CToast key={Date.now()} autohide={true} visible={true} delay={5000}>
@@ -211,56 +223,58 @@ useEffect(() => {
     }
   }, [id, addToast]);
 
-// fetchGroupedSales fonksiyonunu güncelleyin
-const fetchGroupedSales = async () => {
-  try {
-    const { data } = await api.get(`${API_BASE_URL}/musteriSatis/musteriSatis-faturaget-all`);
-    
-    // API'den gelen faturaDurumu'nu kullan, yoksa localStorage'daki bilgiyi kullan
-    const enhancedData = data.map(sale => ({
-      ...sale,
-      faturaDurumu: sale.faturaDurumu !== undefined ? sale.faturaDurumu : 
-                   (invoicedSales.has(sale.satisId) ? 1 : 0)
-    }));
-    
-    setGroupedSales(enhancedData || []);
-  } catch (err) {
-    console.error("Gruplanmış satışları getirme hatası:", err);
-    addToast("Gruplanmış satışlar yüklenemedi.", "error");
-  }
-};
-
-// handleGenerateInvoice fonksiyonunu güncelleyin
-const handleGenerateInvoice = async (satisId) => {
-  if (!userId || userId === 0) {
-    addToast("Kullanıcı kimliği bulunamadı. Lütfen oturum açın.", "error");
-    return;
-  }
-  setLoading(true);
-  try {
-    const payload = [{ SatisId: satisId.toString() }];
-    const response = await api.post(`${API_BASE_URL}/FaturaEkle/generate-invoice-list`, payload);
-    if (response.status === 200 || response.data.success) {
-      addToast(`Satış ID ${satisId} için fatura oluşturuldu.`, "success");
-      setInvoicedSales((prev) => {
-        const newSet = new Set([...prev, satisId]);
-        return newSet;
-      });
-      
-      // Gruplanmış satışları güncelle
-      setGroupedSales(prev => prev.map(sale => 
-        sale.satisId === satisId ? {...sale, faturaDurumu: 1} : sale
-      ));
-    } else {
-      addToast("Fatura oluşturulamadı.", "error");
+  const fetchGroupedSales = async () => {
+    try {
+      const { data } = await api.get(`${API_BASE_URL}/musteriSatis/musteriSatis-faturaget-all`);
+      const enhancedData = data.map(sale => ({
+        ...sale,
+        faturaDurumu: sale.faturaDurumu !== undefined ? sale.faturaDurumu : 
+                     (invoicedSales.has(sale.satisId) ? 1 : 0)
+      }));
+      setGroupedSales(enhancedData || []);
+    } catch (err) {
+      console.error("Gruplanmış satışları getirme hatası:", err);
+      addToast("Gruplanmış satışlar yüklenemedi.", "error");
     }
-  } catch (err) {
-    console.error("Fatura oluşturma hatası:", err);
-    addToast(err.response?.data?.message || "Fatura oluşturulamadı.", "error");
-  } finally {
-    setLoading(false);
-  }
-};
+  };
+
+  const handleGenerateInvoice = async (satisId) => {
+    if (!userId || userId === 0) {
+      addToast("Kullanıcı kimliği bulunamadı. Lütfen oturum açın.", "error");
+      return;
+    }
+    const edmId = getSelectedEdmId();
+    if (!edmId) {
+      addToast("Lütfen bir EDM seçin.", "error");
+      return;
+    }
+    setLoading(true);
+    try {
+      const payload = [{ SatisId: satisId.toString() }];
+      const response = await api.post(
+        `${API_BASE_URL}/FaturaEkle/generate-invoice-list?EDMId=${edmId}`,
+        payload
+      );
+      if (response.status === 200 || response.data.success) {
+        addToast(`Satış ID ${satisId} için fatura oluşturuldu.`, "success");
+        setInvoicedSales((prev) => {
+          const newSet = new Set([...prev, satisId]);
+          return newSet;
+        });
+        setGroupedSales(prev => prev.map(sale => 
+          sale.satisId === satisId ? {...sale, faturaDurumu: 1} : sale
+        ));
+      } else {
+        addToast("Fatura oluşturulamadı.", "error");
+      }
+    } catch (err) {
+      console.error("Fatura oluşturma hatası:", err);
+      addToast(err.response?.data?.message || "Fatura oluşturulamadı.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const mapApiCustomer = async (apiCustomer) => {
     let classificationName = "Bilinmiyor";
     try {
@@ -1030,7 +1044,7 @@ const handleGenerateInvoice = async (satisId) => {
                   <img
                     src={
                       customer.image
-                        ? `https://speedsofttest.com/${customer.image}`
+                        ? `https://localhost:44375/${customer.image}`
                         : "https://via.placeholder.com/100"
                     }
                     alt="Müşteri resmi"
@@ -1162,21 +1176,7 @@ const handleGenerateInvoice = async (satisId) => {
             >
               Yeni Şube Ekle
             </CButton>
-            <CDropdown>
-              <CDropdownToggle color="secondary" disabled={true}>
-                Ödeme Al
-              </CDropdownToggle>
-              <CDropdownMenu>
-                <CDropdownItem disabled>Nakit-Kredi Kartı-Banka</CDropdownItem>
-                <CDropdownItem disabled>Temazsız Kredi Kartı</CDropdownItem>
-                <CDropdownItem disabled>Çek</CDropdownItem>
-                <CDropdownItem disabled>Müşteriden Senet Al</CDropdownItem>
-                <CDropdownItem disabled>Müşteriye Senet Ver</CDropdownItem>
-                <CDropdownItem disabled>Bakiye Düzelt</CDropdownItem>
-                <CDropdownItem disabled>Borç-Alacak Fişleri</CDropdownItem>
-                <CDropdownItem disabled>Cari Virman</CDropdownItem>
-              </CDropdownMenu>
-            </CDropdown>
+{/*        
             <CDropdown>
               <CDropdownToggle color="secondary" disabled={true}>
                 Hesap Ekstresi
@@ -1187,15 +1187,15 @@ const handleGenerateInvoice = async (satisId) => {
                 <CDropdownItem disabled>Detaylı Ekstre</CDropdownItem>
                 <CDropdownItem disabled>Mutabakat Mektubu</CDropdownItem>
               </CDropdownMenu>
-            </CDropdown>
-            <CButton
+            </CDropdown> */}
+            {/* <CButton
               color="primary"
               style={{ color: "white" }}
               onClick={() => addToast("Döküman Yükle işlemi başlatıldı.", "success")}
               disabled={true}
             >
               Döküman Yükle
-            </CButton>
+            </CButton> */}
             <CDropdown>
               <CDropdownToggle color="secondary">
                 Diğer İşlemler
@@ -1209,9 +1209,9 @@ const handleGenerateInvoice = async (satisId) => {
                 <CDropdownItem onClick={() => setShowDeleteModal(true)}>
                   Müşteriyi Sil
                 </CDropdownItem>
-                <CDropdownItem onClick={handleActivate}>
+                {/* <CDropdownItem onClick={handleActivate}>
                   Müşteriyi Aktif Et
-                </CDropdownItem>
+                </CDropdownItem> */}
                 <CDropdownItem disabled>Etiket Yazdır</CDropdownItem>
               </CDropdownMenu>
             </CDropdown>
@@ -1735,7 +1735,7 @@ const handleGenerateInvoice = async (satisId) => {
           </CButton>
         </CModalFooter>
       </CModal>
-{/* Sale Modal */}
+
       <CModal visible={showSaleModal} onClose={() => setShowSaleModal(false)} size="xl">
         <CModalHeader>
           <CModalTitle>Satış Yap</CModalTitle>
@@ -1786,8 +1786,8 @@ const handleGenerateInvoice = async (satisId) => {
                   <option value="">Depo Seçin</option>
                   {saleFormData.urunId &&
                     depots[saleFormData.urunId]?.map((depot) => (
-                      <option key={depot.depoId} value={depot.depoId}>
-                        {depot.depo?.adi || 'Bilinmeyen Depo'} (Stok: {depot.miktar})
+                      <option key={depo.depoId} value={depo.depoId}>
+                        {depo.depo?.adi || 'Bilinmeyen Depo'} (Stok: {depo.miktar})
                       </option>
                     ))}
                 </CFormSelect>
@@ -1851,7 +1851,6 @@ const handleGenerateInvoice = async (satisId) => {
         </CModalFooter>
       </CModal>
 
-      {/* Delete Customer Modal */}
       <CModal visible={showDeleteModal} onClose={() => setShowDeleteModal(false)}>
         <CModalHeader>
           <CModalTitle>Müşteriyi Sil</CModalTitle>

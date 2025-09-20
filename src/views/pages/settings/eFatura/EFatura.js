@@ -46,6 +46,25 @@ const getUserId = () => {
   }
 };
 
+// Seçili EDM ID'sini localStorage'dan al
+const getSelectedEdmId = () => {
+  try {
+    return parseInt(localStorage.getItem("selectedEdmId")) || null;
+  } catch (err) {
+    console.error("Seçili EDM ID'si alınırken hata:", err);
+    return null;
+  }
+};
+
+// Seçili EDM ID'sini localStorage'a kaydet
+const saveSelectedEdmId = (edmId) => {
+  try {
+    localStorage.setItem("selectedEdmId", edmId);
+  } catch (err) {
+    console.error("Seçili EDM ID'si kaydedilirken hata:", err);
+  }
+};
+
 const EFatura = () => {
   const [toasts, setToasts] = useState([]);
   const toaster = useRef();
@@ -55,6 +74,7 @@ const EFatura = () => {
   const [showEdmDeleteModal, setShowEdmDeleteModal] = useState(false);
   const [showEdmListModal, setShowEdmListModal] = useState(false);
   const [selectedEdm, setSelectedEdm] = useState(null);
+  const [selectedEdmId, setSelectedEdmId] = useState(getSelectedEdmId());
   const [loading, setLoading] = useState(false);
   const [userId, setUserId] = useState(getUserId());
   const [edmFormData, setEdmFormData] = useState({
@@ -86,6 +106,9 @@ const EFatura = () => {
         setUserId(newUserId);
         setEdmFormData((prev) => ({ ...prev, kullaniciId: newUserId }));
       }
+      if (e.key === "selectedEdmId") {
+        setSelectedEdmId(getSelectedEdmId());
+      }
     };
 
     window.addEventListener("storage", handleStorageChange);
@@ -93,6 +116,7 @@ const EFatura = () => {
     const initialUserId = getUserId();
     setUserId(initialUserId);
     setEdmFormData((prev) => ({ ...prev, kullaniciId: initialUserId }));
+    setSelectedEdmId(getSelectedEdmId());
 
     return () => window.removeEventListener("storage", handleStorageChange);
   }, []);
@@ -412,6 +436,10 @@ const EFatura = () => {
         addToast(data.message || "EDM bilgisi başarıyla silindi.", "success");
         setShowEdmDeleteModal(false);
         setSelectedEdm(null);
+        if (selectedEdmId === selectedEdm.id) {
+          setSelectedEdmId(null);
+          saveSelectedEdmId(null);
+        }
         fetchEdmBilgileri();
       } else {
         const errorData = await response.json();
@@ -443,6 +471,14 @@ const EFatura = () => {
       kullaniciId: userId,
     });
     setShowEdmUpdateModal(true);
+  };
+
+  // Handle EDM Selection
+  const handleSelectEdm = (edm) => {
+    setSelectedEdmId(edm.id);
+    saveSelectedEdmId(edm.id);
+    addToast(`${edm.unvan} seçildi.`, "success");
+    setShowEdmListModal(false);
   };
 
   // Handle EDM form input change
@@ -571,6 +607,7 @@ const EFatura = () => {
                   <CTableHeaderCell>Vergi Numarası</CTableHeaderCell>
                   <CTableHeaderCell>E-Posta</CTableHeaderCell>
                   <CTableHeaderCell>Telefon</CTableHeaderCell>
+                  <CTableHeaderCell>Durum</CTableHeaderCell>
                   <CTableHeaderCell>İşlemler</CTableHeaderCell>
                 </CTableRow>
               </CTableHead>
@@ -581,6 +618,13 @@ const EFatura = () => {
                     <CTableDataCell>{edm.vergiNumrasi || "Yok"}</CTableDataCell>
                     <CTableDataCell>{edm.email || "Yok"}</CTableDataCell>
                     <CTableDataCell>{edm.telefon || "Yok"}</CTableDataCell>
+                    <CTableDataCell>
+                      {selectedEdmId === edm.id ? (
+                        <span style={{ color: "green", fontWeight: "bold" }}>Seçili</span>
+                      ) : (
+                        <span>-</span>
+                      )}
+                    </CTableDataCell>
                     <CTableDataCell>
                       <div className="d-flex gap-2">
                         <CButton
@@ -611,6 +655,7 @@ const EFatura = () => {
                         <CButton
                           color="success"
                           size="sm"
+                          onClick={() => handleSelectEdm(edm)}
                           style={{ color: "white" }}
                           disabled={loading}
                         >

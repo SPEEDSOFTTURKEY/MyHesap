@@ -15,7 +15,7 @@ import { useAccounts } from '../../context/AccountsContext';
 import { useNavigate } from 'react-router-dom';
 import api from '../../api/api';
 
-const API_BASE_URL = "https://speedsofttest.com/api";
+const API_BASE_URL = "https://localhost:44375/api";
 
 const UpdateAccountModal = () => {
   const {

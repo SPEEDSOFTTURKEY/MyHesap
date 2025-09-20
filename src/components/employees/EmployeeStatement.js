@@ -25,7 +25,7 @@ import api from "../../api/api";
 import DatePickerField from "./DatePickerField";
 import { useEmployees } from "../../context/EmployeesContext";
 
-const API_BASE_URL = "https://speedsofttest.com/api";
+const API_BASE_URL = "https://localhost:44375/api";
 
 const EmployeeStatement = () => {
   const navigate = useNavigate();
@@ -49,44 +49,21 @@ const EmployeeStatement = () => {
     totalBalance: 0,
   });
   const [employeeName, setEmployeeName] = useState(
-    selectedEmployee?.adiSoyadi ||
-    employee?.adiSoyadi ||
-    `ID: ${employeeId || "Bilinmeyen"}`
+    selectedEmployee?.adiSoyadi || employee?.adiSoyadi || "Bilinmeyen Çalışan"
   );
 
-  const [mainCategories, setMainCategories] = useState([]);
-  const [subCategories, setSubCategories] = useState([]);
-
-  useEffect(() => {
-    const fetchCategories = async () => {
-      try {
-        const [mainRes, subRes] = await Promise.all([
-          api.get(`${API_BASE_URL}/masrafAnaKategori/masrafAnakategori-get-all`),
-          api.get(`${API_BASE_URL}/masrafAltKategori/masrafAltkategori-get-all`),
-        ]);
-        setMainCategories(mainRes.data?.data || []);
-        setSubCategories(subRes.data?.data || []);
-      } catch (err) {
-        console.error("Kategori verileri alınamadı:", err);
-      }
-    };
-
-    fetchCategories();
-  }, []);
-
-  const getMainCategoryName = (id) => {
-    const category = mainCategories.find((cat) => cat.id === id);
-    return category?.adi || `ID: ${id}`;
+  const getMainCategoryName = (transaction) => {
+    return transaction?.masrafAltKategori?.masrafAnaKategori?.adi || "-";
   };
 
-  const getSubCategoryName = (id) => {
-    const category = subCategories.find((cat) => cat.id === id);
-    return category?.adi || `ID: ${id}`;
+  const getSubCategoryName = (transaction) => {
+    return transaction?.masrafAltKategori?.adi || "-";
   };
 
   const getEmployeeName = (id) => {
+    if (!id) return "-";
     const emp = employees.find((e) => e.id === id);
-    return emp?.adiSoyadi || `ID: ${id}`;
+    return emp?.adiSoyadi || "-";
   };
 
   const fetchTransactions = async (id) => {
@@ -97,6 +74,7 @@ const EmployeeStatement = () => {
       return;
     }
     setLoading(true);
+    setError(null);
     try {
       const startDate = dateRange.startDate
         ? dateRange.startDate.format("YYYY-MM-DD")
@@ -108,30 +86,25 @@ const EmployeeStatement = () => {
       const response = await api.get(`${API_BASE_URL}/calisancari/calisancari-get-all`, {
         headers: { accept: "*/*" },
         params: {
+          employeeId: id,
           startDate: startDate,
           endDate: endDate,
         },
       });
-
-      console.log("Hesap ekstresi yanıtı:", response.data);
 
       const data = Array.isArray(response.data)
         ? response.data
         : response.data.data || [];
       const formattedData = data.map((transaction) => ({
         id: transaction.id,
-        tarih: transaction.tarih || "",
+        tarih: transaction.tarih || null,
         aciklama: transaction.aciklama || "-",
         borc: transaction.borc || 0,
         alacak: transaction.alacak || 0,
         bakiye: transaction.bakiye || 0,
         calisan: getEmployeeName(transaction.calisanId),
-        masrafAnaKategoriAdi: getMainCategoryName(
-          transaction.masrafAnaKategoriId
-        ),
-        masrafAltKategoriAdi: getSubCategoryName(
-          transaction.masrafAltKategoriId
-        ),
+        masrafAnaKategoriAdi: getMainCategoryName(transaction),
+        masrafAltKategoriAdi: getSubCategoryName(transaction),
       }));
 
       setTransactions(formattedData);
@@ -142,14 +115,8 @@ const EmployeeStatement = () => {
           : null
       );
 
-      const totalDebt = formattedData.reduce(
-        (sum, t) => sum + (t.borc || 0),
-        0
-      );
-      const totalCredit = formattedData.reduce(
-        (sum, t) => sum + (t.alacak || 0),
-        0
-      );
+      const totalDebt = formattedData.reduce((sum, t) => sum + (t.borc || 0), 0);
+      const totalCredit = formattedData.reduce((sum, t) => sum + (t.alacak || 0), 0);
       const totalBalance =
         formattedData.length > 0
           ? formattedData[formattedData.length - 1].bakiye
@@ -241,26 +208,24 @@ const EmployeeStatement = () => {
       const wb = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(wb, ws, "Hesap Ekstresi");
 
-      XLSX.writeFile(wb, `${employeeName || "Calisan"}_Hesap_Ekstresi.xlsx`, {
+      XLSX.writeFile(wb, `${employeeName}_Hesap_Ekstresi.xlsx`, {
         bookType: "xlsx",
         type: "binary",
       });
     } catch (err) {
       console.error("Excel dışa aktarma hatası:", err);
-      setError("Excel dosyası oluşturulurken hata oluştu");
+      setError("Excel dosyası oluşturulurken hata oluştu.");
     }
   };
 
-  const exportToPDF = (employeeName, dateRange, data) => {
+  const exportToPDF = () => {
     try {
       const doc = new jsPDF();
       doc.setFont("helvetica", "normal");
       doc.setFontSize(12);
 
-      // Başlık
-      doc.text(`Hesap Ekstresi - ${employeeName || "Çalışan"}`, 14, 20);
+      doc.text(`Hesap Ekstresi - ${employeeName}`, 14, 20);
 
-      // Tarih aralığı
       if (dateRange.startDate && dateRange.endDate) {
         doc.text(
           `Tarih Aralığı: ${dayjs(dateRange.startDate).format("DD.MM.YYYY")} - ${dayjs(
@@ -318,10 +283,10 @@ const EmployeeStatement = () => {
         headStyles: { fillColor: [41, 101, 168], textColor: [255, 255, 255] },
       });
 
-      doc.save(`${employeeName || "Calisan"}_Hesap_Ekstresi.pdf`);
+      doc.save(`${employeeName}_Hesap_Ekstresi.pdf`);
     } catch (err) {
       console.error("PDF dışa aktarma hatası:", err);
-      setError("PDF dosyası oluşturulurken hata oluştu");
+      setError("PDF dosyası oluşturulurken hata oluştu.");
     }
   };
 
@@ -329,9 +294,7 @@ const EmployeeStatement = () => {
     if (employeeId) {
       fetchTransactions(employeeId);
       setEmployeeName(
-        selectedEmployee?.adiSoyadi ||
-        employee?.adiSoyadi ||
-        `ID: ${employeeId}`
+        selectedEmployee?.adiSoyadi || employee?.adiSoyadi || "Bilinmeyen Çalışan"
       );
     } else {
       setError("Çalışan bilgisi eksik.");
@@ -359,7 +322,7 @@ const EmployeeStatement = () => {
         >
           <CRow className="align-items-center">
             <CCol xs={8} className="text-start">
-              <h5>{employeeName || "Çalışan"} Hesap Ekstresi</h5>
+              <h5>{employeeName} Hesap Ekstresi</h5>
             </CCol>
             <CCol xs={4}></CCol>
           </CRow>
@@ -402,14 +365,14 @@ const EmployeeStatement = () => {
               <CButton
                 color="danger"
                 className="text-white"
-                onClick={() => exportToPDF(employeeName, dateRange, filteredTransactions)}
+                onClick={exportToPDF}
                 disabled={filteredTransactions.length === 0}
               >
                 PDF'e Aktar
               </CButton>
             </CCol>
           </CRow>
-          {loading && <p>Yükleniyor...</p>}
+          {loading && <p className="text-center">Yükleniyor...</p>}
           {!loading && !error && filteredTransactions.length > 0 ? (
             <CTable responsive>
               <CTableHead>
@@ -433,12 +396,8 @@ const EmployeeStatement = () => {
                         : "-"}
                     </CTableDataCell>
                     <CTableDataCell>{transaction.calisan}</CTableDataCell>
-                    <CTableDataCell>
-                      {transaction.masrafAnaKategoriAdi}
-                    </CTableDataCell>
-                    <CTableDataCell>
-                      {transaction.masrafAltKategoriAdi}
-                    </CTableDataCell>
+                    <CTableDataCell>{transaction.masrafAnaKategoriAdi}</CTableDataCell>
+                    <CTableDataCell>{transaction.masrafAltKategoriAdi}</CTableDataCell>
                     <CTableDataCell>{transaction.aciklama}</CTableDataCell>
                     <CTableDataCell>
                       {transaction.borc
@@ -483,9 +442,13 @@ const EmployeeStatement = () => {
             </CTable>
           ) : (
             !loading &&
-            !error && <p>Seçilen tarih aralığında işlem bulunmamaktadır.</p>
+            !error && (
+              <p className="text-center">
+                Seçilen tarih aralığında işlem bulunmamaktadır.
+              </p>
+            )
           )}
-          {error && <p className="text-danger">{error}</p>}
+          {error && <p className="text-danger text-center">{error}</p>}
         </CCardBody>
       </CCard>
     </>

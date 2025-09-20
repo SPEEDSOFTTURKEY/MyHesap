@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
@@ -30,7 +31,7 @@ import { cilPencil, cilList, cilTrash } from "@coreui/icons";
 import ProductModal from "../../../components/products/ProductModal";
 import StockMovementModal from "../../../components/products/StockMovementModal";
 import api from "../../../api/api";
-const API_BASE_URL = "https://speedsofttest.com/api";
+const API_BASE_URL = "https://localhost:44375/api";
 
 const ProductDetail = () => {
   const { id } = useParams();
@@ -166,7 +167,6 @@ const ProductDetail = () => {
       purchaseDiscount: apiProduct.alisIskontosu,
       otvRate: apiProduct.oivOrani,
       otvType: apiProduct.otvTipi,
-      // Sadece dosya adını sakla, tam URL'yi render sırasında oluştur
       images: apiProduct.fotograf ? [apiProduct.fotograf] : [],
       saleCurrency: apiProduct.paraBirimi || "TRY",
     };
@@ -203,7 +203,12 @@ const ProductDetail = () => {
     setLoading(true);
     setShowDeleteToast(false);
     try {
-      await api.delete(`${API_BASE_URL}/urun/urun-delete/${id}`);
+      const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+      if (user.id === 0) {
+        addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "error");
+        return;
+      }
+      await api.delete(`${API_BASE_URL}/urun/urun-delete/${id}?kullaniciId=${user.id}`);
       addToast("Ürün silindi.", "success");
       navigate("/app/products");
     } catch (err) {
@@ -335,7 +340,7 @@ const ProductDetail = () => {
                     product.images[0].trim() !== "" ? (
                       <>
                         <img
-                          src={`https://speedsofttest.com/${product.images[0]}`}
+                          src={`https://localhost:44375/${product.images[0]}`}
                           alt={product.name}
                           style={{
                             maxWidth: "200px",
@@ -491,7 +496,7 @@ const ProductDetail = () => {
                 <CIcon icon={cilList} /> Diğer İşlemler
               </CDropdownToggle>
               <CDropdownMenu>
-                <CDropdownItem
+                {/* <CDropdownItem
                   disabled={true}
                   onClick={() => handleOtherAction("Döküman Yükle")}
                 >
@@ -508,9 +513,9 @@ const ProductDetail = () => {
                   onClick={() => handleOtherAction("Müşteri Kodları")}
                 >
                   Müşteri Kodları
-                </CDropdownItem>
+                </CDropdownItem> */}
                 <CDropdownItem onClick={() => handleOtherAction("Ürün Silme")}>
-                  Ürün Silme
+                  Ürünü Sil
                 </CDropdownItem>
               </CDropdownMenu>
             </CDropdown>

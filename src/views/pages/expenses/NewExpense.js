@@ -24,7 +24,7 @@ import dayjs from "dayjs";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useUsers } from "../../../context/UsersContext";
 import api from "../../../api/api";
-const API_BASE_URL = "https://speedsofttest.com/api";
+const API_BASE_URL = "https://localhost:44375/api";
 
 // Hesap kategorileri
 const accountCategories = [

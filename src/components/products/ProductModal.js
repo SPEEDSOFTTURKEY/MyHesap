@@ -17,7 +17,7 @@ import OtherInfo from "./OtherInfo";
 import Images from "./Images";
 import api from "../../api/api";
 
-const API_BASE_URL = "https://speedsofttest.com/api";
+const API_BASE_URL = "https://localhost:44375/api";
 
 const ProductModal = ({
   visible,
@@ -319,7 +319,7 @@ const ProductModal = ({
       >
         <CModalHeader style={{ backgroundColor: "#2965A8", color: "#fff" }}>
           <CModalTitle>
-            {product?.id ? "Ürün/Hizmet Güncelle" : "Yeni Ürün/Hizmet Ekle"}
+            {product?.id ? "" : "Yeni Ürün/Hizmet Ekle"}
           </CModalTitle>
         </CModalHeader>
         <CModalBody>

@@ -32,7 +32,7 @@ const Dashboard = () => {
   const { users, setUsers, createAccount, fetchAccount } = useAccounts(); // fetchAccount'ı da import ettik (tıklama için)
   const { user, logout } = useUser();
   const navigate = useNavigate(); // Navigasyon için
-  const API_BASE_URL = "https://speedsofttest.com/api";
+  const API_BASE_URL = "https://localhost:44375/api";
 
   const typeToCategoryId = {
     bank: 1,

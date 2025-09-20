@@ -20,7 +20,7 @@ import ErrorBoundary from "../../products/ErrorBoundary";
 import CIcon from "@coreui/icons-react";
 import { cilFax, cilFile, cilPlus, cilTrash, cilPencil } from "@coreui/icons";
 import IMask from "imask";
-const API_BASE_URL = "https://speedsofttest.com/api";
+const API_BASE_URL = "https://localhost:44375/api";
 
 const MembershipDetail = () => {
   const [toasts, setToasts] = useState([]);

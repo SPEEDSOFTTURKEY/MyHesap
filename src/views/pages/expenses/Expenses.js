@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from "react";
 import {
+  CButton,
   CButtonGroup,
   CFormCheck,
   CRow,
@@ -12,7 +12,6 @@ import {
   CTableHeaderCell,
   CTableBody,
   CTableDataCell,
-  CButton,
   CDropdown,
   CDropdownToggle,
   CDropdownMenu,
@@ -40,9 +39,10 @@ import {
   cilTrash,
 } from "@coreui/icons";
 import { useNavigate } from "react-router-dom";
+import { useState, useEffect, useRef } from "react";
 import { useUsers } from "../../../context/UsersContext";
 import api from "../../../api/api";
-const API_BASE_URL = "https://speedsofttest.com/api";
+const API_BASE_URL = "https://localhost:44375/api";
 
 const Expenses = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -262,6 +262,66 @@ const Expenses = () => {
     }
   };
 
+  const handlePayExpense = async (expense) => {
+    const userId = getUserId();
+    if (!userId) {
+      setToast({
+        message: "Geçerli bir kullanıcı oturumu bulunamadı.",
+        color: "danger",
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const formData = new FormData();
+      formData.append("Id", expense.id.toString());
+      formData.append("HesapId", expense.hesapId);
+      formData.append("OdemeDurumu", "1");
+      formData.append("OdemeTuru", expense.odemeTuru || "Nakit");
+      formData.append("Tutar", expense.tutar);
+      formData.append(
+        "GuncellenmeTarihi",
+        new Date().toISOString().split("T")[0],
+      );
+      formData.append("EklenmeTarihi", expense.eklenmeTarihi);
+      formData.append("Aciklama", expense.aciklama || "");
+      formData.append("OdemeTarihi", new Date().toISOString().split("T")[0]);
+      formData.append("IslemTarihi", expense.islemTarihi);
+      formData.append("MasrafAltKategoriId", expense.masrafAltKategoriId);
+      formData.append("MasrafAnaKategoriId", expense.masrafAnaKategoriId);
+      formData.append("KDVOrani", expense.kdvOrani);
+      formData.append("kullaniciId", userId.toString());
+      formData.append("Arsiv", expense.Arsiv || "");
+      if (expense.arsiv) {
+        const dummyFile = new File([""], "dummy.png", { type: "image/png" });
+        formData.append("arsiv", dummyFile);
+      }
+
+      const response = await api.put(`${API_BASE_URL}/masraf/masraf-update`, formData, {
+        headers: { "Content-Type": "multipart/form-data", accept: "*/*" },
+      });
+      console.log("Masraf ödeme API response (masraf-update):", response.data);
+      
+      await fetchExpenses();
+      setToast({
+        message: "Masraf başarıyla ödendi.",
+        color: "success",
+      });
+    } catch (error) {
+      console.error(
+        "Masraf ödenirken hata:",
+        error.response?.data || error.message,
+      );
+      setToast({
+        message: `Masraf ödenirken hata: ${error.response?.data?.message || error.message}`,
+        color: "danger",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleEditExpense = (expense) => {
     navigate("/app/new-expense", { state: { expense } });
   };
@@ -291,7 +351,7 @@ const Expenses = () => {
     }
     try {
       const fileName = arsiv.replace(/\\/g, "/").split("/").pop();
-      const baseUrl = "http://speedsofttest.com"; // Sunucu adresiniz
+      const baseUrl = "https://localhost:44375"; // Sunucu adresiniz
       const fileUrl = `${baseUrl}/arsiv/${fileName}`; // Doğru klasör: /arsiv/
 
       console.log("Arsiv:", arsiv);
@@ -611,6 +671,17 @@ const Expenses = () => {
                             >
                               <CIcon icon={cilPencil} />
                             </CButton>
+                            {expense.odemeDurumu === 0 && (
+                              <CButton
+                                color="success"
+                                size="sm"
+                                style={{ color: "white", marginBottom: "3px" }}
+                                onClick={() => handlePayExpense(expense)}
+                                className="me-2"
+                              >
+                                Öde
+                              </CButton>
+                            )}
                             <CButton
                               color="danger"
                               size="sm"

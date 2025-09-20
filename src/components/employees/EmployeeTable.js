@@ -31,7 +31,18 @@ import dayjs from "dayjs";
 import api from "../../api/api";
 import DatePickerField from "./DatePickerField";
 
-const API_BASE_URL = "https://speedsofttest.com/api";
+const API_BASE_URL = "https://localhost:44375/api";
+
+// Kullanıcı ID'sini almak için yardımcı fonksiyon
+const getUserId = () => {
+  try {
+    const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+    return user.id;
+  } catch (err) {
+    console.error("Kullanıcı ID'si alınırken hata:", err);
+    return 0;
+  }
+};
 
 const EmployeeTable = ({
   transactions,
@@ -88,10 +99,15 @@ const EmployeeTable = ({
       addToast("Cari işlem ID'si eksik", "hata");
       return;
     }
+    const userId = getUserId();
+    if (!userId) {
+      addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "hata");
+      return;
+    }
     setDeleteLoading(true);
     try {
       await api.delete(
-        `${API_BASE_URL}/calisancari/calisancari-delete/${selectedTransaction.id}`,
+        `${API_BASE_URL}/calisancari/calisancari-delete/${selectedTransaction.id}?kullaniciId=${userId}`,
         {
           headers: { accept: "*/*" },
         }
@@ -123,6 +139,11 @@ const EmployeeTable = ({
 
   const handleEditSubmit = async (e) => {
     e.preventDefault();
+    const userId = getUserId();
+    if (!userId) {
+      addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "hata");
+      return;
+    }
     setDeleteLoading(true);
     try {
       const updatedTransaction = {
@@ -139,6 +160,8 @@ const EmployeeTable = ({
         borc: parseFloat(editForm.borc) || 0,
         alacak: parseFloat(editForm.alacak) || 0,
         bakiye: parseFloat(editForm.bakiye) || 0,
+        kullaniciId: userId,
+        guncelleyenKullaniciId: userId,
       };
 
       await api.put(`${API_BASE_URL}/calisancari/calisancari-update`, updatedTransaction, {
@@ -248,7 +271,7 @@ const EmployeeTable = ({
                         : "-"}
                     </CTableDataCell>
                     <CTableDataCell>
-                      <CButton
+                      {/* <CButton
                         color="info"
                         size="sm"
                         style={{ color: "white", marginBottom: "3px" }}
@@ -259,8 +282,8 @@ const EmployeeTable = ({
                         disabled={true}
                       >
                         <CIcon icon={cilPrint} />
-                      </CButton>
-                      <CButton
+                      </CButton> */}
+                      {/* <CButton
                         color="warning"
                         size="sm"
                         style={{ color: "white", marginBottom: "3px" }}
@@ -269,7 +292,7 @@ const EmployeeTable = ({
                         disabled={deleteLoading}
                       >
                         <CIcon icon={cilPencil} />
-                      </CButton>
+                      </CButton> */}
                       <CButton
                         color="danger"
                         size="sm"

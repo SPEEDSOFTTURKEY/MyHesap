@@ -34,7 +34,7 @@ import {
 import ProductTable from "../../../components/products/ProductTable";
 import api from "../../../api/api";
 import ErrorBoundary from "./ErrorBoundary";
-const API_BASE_URL = "https://speedsofttest.com/api";
+const API_BASE_URL = "https://localhost:44375/api";
 
 const Products = () => {
   const [toasts, setToasts] = useState([]);
@@ -259,8 +259,15 @@ const Products = () => {
     setShowDeleteModal(false);
     try {
       const idsToDelete = [...selectedIds];
+      const user = JSON.parse(localStorage.getItem("user")) || { id: 0 };
+      if (user.id === 0) {
+        addToast("Geçerli bir kullanıcı oturumu bulunamadı.", "error");
+        return;
+      }
       await Promise.all(
-        idsToDelete.map((id) => api.delete(`${API_BASE_URL}/urun/urun-delete/${id}`)),
+        idsToDelete.map((id) =>
+          api.delete(`${API_BASE_URL}/urun/urun-delete/${id}?kullaniciId=${user.id}`)
+        ),
       );
 
       await fetchProducts();

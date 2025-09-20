@@ -55,7 +55,7 @@ const registerTurkishFont = (doc) => {
   }
 };
 
-const API_BASE_URL = "https://speedsofttest.com/api";
+const API_BASE_URL = "https://localhost:44375/api";
 
 const api = axios.create({
   baseURL: API_BASE_URL,

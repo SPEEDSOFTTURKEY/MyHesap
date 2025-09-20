@@ -3,7 +3,7 @@ import CIcon from "@coreui/icons-react";
 import { cilUser } from "@coreui/icons";
 import { useState, useEffect } from "react";
 
-const BASE_PHOTO_URL = "https://speedsofttest.com";
+const BASE_PHOTO_URL = "https://localhost:44375";
 const DEFAULT_PHOTO = "/default-profile.png";
 
 // Zaman damgasını yalnızca bir kez eklemek için
